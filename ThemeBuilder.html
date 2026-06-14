@@ -333,7 +333,7 @@ function add(type,key,unit){
       borderThickness:2,cornerRadius:'0 0 0 0',maxNum:s.max||100,animated:false});
   } else if(type==='ring'){
     Object.assign(el,{w:130,h:130,ringWidth:12,perimeter:127,maxValue:s.max||100,
-      indexColor:'#FF00B3EA',backColor:'#00000000'});
+      indexColor:'#FF00B3EA',backColor:'#FF333344'});
   } else if(type==='decor'){
     Object.assign(el,{w:300,h:40,fillColor:'#FF4A4745',cornerRadius:'0 0 0 0'});
   }
@@ -352,7 +352,12 @@ function renderEl(el){
     makeDrag(div,el); makeResize(div,el);
     div.addEventListener('click',e=>{e.stopPropagation();sel(el.id);});
   }
-  div.style.cssText+=`left:${el.x}px;top:${el.y}px;width:${el.w||100}px;height:${el.h||40}px;z-index:${el.z+10};display:${el.visible?'':'none'}`;
+  div.style.left=el.x+'px';
+  div.style.top=el.y+'px';
+  div.style.width=(el.w||100)+'px';
+  div.style.height=(el.h||40)+'px';
+  div.style.zIndex=el.z+10;
+  div.style.display=el.visible?'':'none';
   div.querySelector('.lz').textContent='z:'+el.z;
   const inner=div.querySelector('.ei2');
 
@@ -369,13 +374,19 @@ function renderEl(el){
   } else if(el.type==='ring'){
     const s=SEN[el.dataKey]||{s:50};
     const val=parseFloat(s.s||50); const max=el.maxValue||100;
-    const pct=Math.min(1,val/max); const r=(el.perimeter||127)/(2*Math.PI);
-    const circ=2*Math.PI*r; const dash=circ*pct; const gap=circ*(1-pct);
+    const pct=Math.min(1,Math.max(0,val/max));
+    const rw=el.ringWidth||12;
+    const r=Math.max(10,(el.perimeter||127)/(2*Math.PI));
+    const circ=2*Math.PI*r;
+    const dash=circ*pct; const gap=circ-dash;
     const cx=el.w/2, cy=el.h/2;
-    inner.innerHTML=`<div class="ring-wrap"><svg width="${el.w}" height="${el.h}" viewBox="0 0 ${el.w} ${el.h}">
-      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${a2css(el.backColor)||'rgba(0,0,0,.3)'}" stroke-width="${el.ringWidth||12}"/>
-      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${a2css(el.indexColor)}" stroke-width="${el.ringWidth||12}" stroke-dasharray="${dash} ${gap}" stroke-linecap="round" transform="rotate(-90 ${cx} ${cy})"/>
-      <text x="${cx}" y="${cy+5}" text-anchor="middle" fill="${a2css(el.indexColor)}" font-size="${Math.round(r*0.7)}px">${Math.round(val)}</text>
+    const bgStroke=a2css(el.backColor||'#FF333344');
+    const fgStroke=a2css(el.indexColor||'#FF00B3EA');
+    const labelSize=Math.max(10,Math.round(r*0.55));
+    inner.innerHTML=`<div class="ring-wrap"><svg width="${el.w}" height="${el.h}" viewBox="0 0 ${el.w} ${el.h}" style="overflow:visible">
+      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${bgStroke}" stroke-width="${rw}"/>
+      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${fgStroke}" stroke-width="${rw}" stroke-dasharray="${dash.toFixed(2)} ${gap.toFixed(2)}" stroke-linecap="butt" transform="rotate(-90 ${cx} ${cy})"/>
+      <text x="${cx}" y="${cy+labelSize*0.35}" text-anchor="middle" dominant-baseline="middle" fill="${fgStroke}" font-size="${labelSize}px" font-weight="700">${Math.round(val)}</text>
     </svg></div>`;
   } else if(el.type==='image'){
     inner.innerHTML=el.data?`<img src="${el.data}" style="width:100%;height:100%;object-fit:cover;display:block">`:'<div class="iph">📷<span>'+( el.filename||'image')+'</span></div>';
@@ -454,8 +465,8 @@ function renderProps(el){
     h+=`<div class="ps"><div class="pt">Font</div>
     <div class="pr"><label>Size px</label><input type="number" value="${el.fontSize||30}" onchange="sp('fontSize',+this.value,1)"></div>
     <div class="pr"><label>Family</label><input type="text" value="${el.fontFamily||'Arial'}" onchange="sp('fontFamily',this.value,1)"></div>
-    <div class="pr"><label>Color</label><input type="color" value="${a2hex(el.color)}" onchange="setArgb('color',this.value,getAlpha(el.color))">
-    <input type="number" min="0" max="255" style="width:48px" value="${getAlpha(el.color)}" placeholder="A" onchange="setAlpha('color',+this.value)"></div>
+    <div class="pr"><label>Color</label><input type="color" data-field="color" value="${a2hex(el.color)}" onchange="setArgbFromPicker(this)">
+    <input type="number" min="0" max="255" style="width:48px" data-field="color" value="${getAlpha(el.color)}" placeholder="A" onchange="setAlphaFromInput(this)"></div>
     <div class="pr"><label>Bold</label><input type="checkbox" ${el.bold?'checked':''} onchange="sp('bold',this.checked,1)"></div>
     </div>`;
   }
@@ -465,12 +476,12 @@ function renderProps(el){
     h+=`<div class="ps"><div class="pt">Bar</div>
     <div class="pr"><label>Sensor</label><select onchange="sp('dataKey',this.value,1)">${bo}</select></div>
     <div class="pr"><label>Max Value</label><input type="number" value="${el.maxNum||100}" onchange="sp('maxNum',+this.value,1)"></div>
-    <div class="pr"><label>Fill</label><input type="color" value="${a2hex(el.fillColor)}" onchange="setArgb('fillColor',this.value,getAlpha(el.fillColor))">
-    <input type="number" min="0" max="255" style="width:48px" value="${getAlpha(el.fillColor)}" onchange="setAlpha('fillColor',+this.value)"></div>
-    <div class="pr"><label>Border</label><input type="color" value="${a2hex(el.borderColor)}" onchange="setArgb('borderColor',this.value,getAlpha(el.borderColor))">
-    <input type="number" min="0" max="255" style="width:48px" value="${getAlpha(el.borderColor)}" onchange="setAlpha('borderColor',+this.value)"></div>
-    <div class="pr"><label>Background</label><input type="color" value="${a2hex(el.bgColor)}" onchange="setArgb('bgColor',this.value,getAlpha(el.bgColor))">
-    <input type="number" min="0" max="255" style="width:48px" value="${getAlpha(el.bgColor)}" onchange="setAlpha('bgColor',+this.value)"></div>
+    <div class="pr"><label>Fill</label><input type="color" data-field="fillColor" value="${a2hex(el.fillColor)}" onchange="setArgbFromPicker(this)">
+    <input type="number" min="0" max="255" style="width:48px" data-field="fillColor" value="${getAlpha(el.fillColor)}" onchange="setAlphaFromInput(this)"></div>
+    <div class="pr"><label>Border</label><input type="color" data-field="borderColor" value="${a2hex(el.borderColor)}" onchange="setArgbFromPicker(this)">
+    <input type="number" min="0" max="255" style="width:48px" data-field="borderColor" value="${getAlpha(el.borderColor)}" onchange="setAlphaFromInput(this)"></div>
+    <div class="pr"><label>Background</label><input type="color" data-field="bgColor" value="${a2hex(el.bgColor)}" onchange="setArgbFromPicker(this)">
+    <input type="number" min="0" max="255" style="width:48px" data-field="bgColor" value="${getAlpha(el.bgColor)}" onchange="setAlphaFromInput(this)"></div>
     <div class="pr"><label>Border px</label><input type="number" value="${el.borderThickness||2}" onchange="sp('borderThickness',+this.value,1)"></div>
     <div class="pr"><label>Corner R</label><input type="text" value="${el.cornerRadius||'0 0 0 0'}" onchange="sp('cornerRadius',this.value,1)"></div>
     <div class="pr"><label>Animated</label><input type="checkbox" ${el.animated?'checked':''} onchange="sp('animated',this.checked,0)"></div>
@@ -484,17 +495,17 @@ function renderProps(el){
     <div class="pr"><label>Max Value</label><input type="number" value="${el.maxValue||100}" onchange="sp('maxValue',+this.value,1)"></div>
     <div class="pr"><label>Ring Width</label><input type="number" value="${el.ringWidth||12}" onchange="sp('ringWidth',+this.value,1)"></div>
     <div class="pr"><label>Perimeter</label><input type="number" value="${el.perimeter||127}" onchange="sp('perimeter',+this.value,1)"></div>
-    <div class="pr"><label>Color</label><input type="color" value="${a2hex(el.indexColor)}" onchange="setArgb('indexColor',this.value,getAlpha(el.indexColor))">
-    <input type="number" min="0" max="255" style="width:48px" value="${getAlpha(el.indexColor)}" onchange="setAlpha('indexColor',+this.value)"></div>
-    <div class="pr"><label>BG Color</label><input type="color" value="${a2hex(el.backColor)}" onchange="setArgb('backColor',this.value,getAlpha(el.backColor))">
-    <input type="number" min="0" max="255" style="width:48px" value="${getAlpha(el.backColor)}" onchange="setAlpha('backColor',+this.value)"></div>
+    <div class="pr"><label>Color</label><input type="color" data-field="indexColor" value="${a2hex(el.indexColor)}" onchange="setArgbFromPicker(this)">
+    <input type="number" min="0" max="255" style="width:48px" data-field="indexColor" value="${getAlpha(el.indexColor)}" onchange="setAlphaFromInput(this)"></div>
+    <div class="pr"><label>BG Color</label><input type="color" data-field="backColor" value="${a2hex(el.backColor)}" onchange="setArgbFromPicker(this)">
+    <input type="number" min="0" max="255" style="width:48px" data-field="backColor" value="${getAlpha(el.backColor)}" onchange="setAlphaFromInput(this)"></div>
     </div>`;
   }
 
   if(el.type==='decor'){
     h+=`<div class="ps"><div class="pt">Decorative Block</div>
-    <div class="pr"><label>Fill</label><input type="color" value="${a2hex(el.fillColor)}" onchange="setArgb('fillColor',this.value,getAlpha(el.fillColor))">
-    <input type="number" min="0" max="255" style="width:48px" value="${getAlpha(el.fillColor)}" onchange="setAlpha('fillColor',+this.value)"></div>
+    <div class="pr"><label>Fill</label><input type="color" data-field="fillColor" value="${a2hex(el.fillColor)}" onchange="setArgbFromPicker(this)">
+    <input type="number" min="0" max="255" style="width:48px" data-field="fillColor" value="${getAlpha(el.fillColor)}" onchange="setAlphaFromInput(this)"></div>
     <div class="pr"><label>Corner R</label><input type="text" value="${el.cornerRadius||'0 0 0 0'}" onchange="sp('cornerRadius',this.value,1)"></div>
     </div>`;
   }
@@ -506,18 +517,23 @@ function sp(k,v,refresh){
   const el=elems.find(e=>e.id===selId);if(!el)return;
   el[k]=v; if(refresh){renderEl(el);refreshLayers();} updStatus();
 }
-function setArgb(k,hex,alpha){
+// Read current alpha from the element's stored color, combine with new hex from picker
+function setArgbFromPicker(input){
   const el=elems.find(e=>e.id===selId);if(!el)return;
-  const a=alpha.toString(16).padStart(2,'0').toUpperCase();
-  el[k]='#'+a+hex.slice(1).toUpperCase();
+  const k=input.dataset.field;
+  const cur=el[k]||'#FFFFFFFF';
+  const a=getAlpha(cur).toString(16).padStart(2,'0').toUpperCase();
+  el[k]='#'+a+input.value.slice(1).toUpperCase();
   renderEl(el);
 }
-function setAlpha(k,alpha){
+// Read current hex from element's stored color, combine with new alpha from number input
+function setAlphaFromInput(input){
   const el=elems.find(e=>e.id===selId);if(!el)return;
+  const k=input.dataset.field;
   const cur=el[k]||'#FFFFFFFF';
-  const hex=cur.length===9?cur.slice(3):(cur.length===7?cur.slice(1):'FFFFFF');
-  const a=Math.max(0,Math.min(255,alpha)).toString(16).padStart(2,'0').toUpperCase();
-  el[k]='#'+a+hex.toUpperCase();
+  const hex=(cur.length===9?cur.slice(3):(cur.length===7?cur.slice(1):'FFFFFF')).toUpperCase();
+  const a=Math.max(0,Math.min(255,+input.value)).toString(16).padStart(2,'0').toUpperCase();
+  el[k]='#'+a+hex;
   renderEl(el);
 }
 function a2hex(c){if(!c)return'#000000';if(c.length===9)return'#'+c.slice(3);return c.length===7?c:'#000000';}
