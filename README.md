@@ -108,13 +108,29 @@ ThemeName/
 
 The font property panel has three ways to choose a font:
 
-- **Dropdown** — all fonts found in the built-in Jonsbo themes, pre-loaded and ready to use
-- **Load System Fonts** button — queries fonts installed on your Windows machine (Chrome/Edge only, requires a one-time permission prompt)
-- **Custom entry** — type any font name directly into the text field for fonts not in either list
+- **Dropdown** — all fonts found in the built-in Jonsbo themes, pre-loaded and ready to use. Also populated with your system fonts after loading them.
+- **Load System Fonts** button — queries all fonts currently installed on your Windows machine and adds them to the dropdown. Requires Chrome or Edge (not Firefox), and a one-time permission popup will appear asking for font access — click Allow.
+- **Custom entry** — type any font name directly into the text field below the dropdown for fonts not in either list. The exact internal font name must be used.
+
+### Loading and Installing New Fonts
+
+The recommended workflow for using a custom font in your theme:
+
+1. Download the font `.ttf` or `.otf` file
+2. Right-click the font file in Windows Explorer and select **Install** (or **Install for all users**)
+3. Open the Theme Builder in Chrome or Edge
+4. Select a text element, then click **🔍 Load System Fonts** in the font section
+5. Accept the font access permission when prompted
+6. Your newly installed font will appear in the dropdown — select it
+7. When you export your theme ZIP, copy the font file into the `font\` subfolder before installing the theme
+
+> **Why install on Windows first?** The Theme Builder uses your browser's access to locally installed fonts. The font must be registered with Windows for it to appear in the system font list. Simply having the `.ttf` file sitting in a folder is not enough.
+
+> **Font name vs filename:** The name you must use in `FontFamily@#` in `Setting.txt` is the font's **internal name** as Windows knows it — this is shown in the dropdown after loading system fonts. It is often different from the filename. For example, `TomorrowEB.ttf` might have the internal name `Tomorrow ExtraBold`.
 
 ### Font Files in Your Theme
 
-Font files must be placed in the `font\` subfolder of your theme folder. The font name used in `FontFamily@#` in `Setting.txt` must match the font's **internal name** as registered with the operating system, not necessarily the filename.
+Font files must be placed in the `font\` subfolder of your theme folder. The font must also be installed on the Windows system running the Jonsbo AIO software — the `font\` folder ensures the package is self-contained for sharing, but the font still needs to be installed on the target machine separately.
 
 ### Built-in Theme Fonts
 

@@ -332,7 +332,7 @@ function add(type,key,unit){
     Object.assign(el,{w:300,h:40,fillColor:'#FF499CDE',borderColor:'#FFFFFFFF',bgColor:'#00000000',
       borderThickness:2,cornerRadius:'0 0 0 0',maxNum:s.max||100,animated:false});
   } else if(type==='ring'){
-    Object.assign(el,{w:130,h:130,ringWidth:12,perimeter:127,maxValue:s.max||100,
+    Object.assign(el,{w:200,h:200,ringWidth:12,perimeter:200,maxValue:s.max||100,
       indexColor:'#FF00B3EA',backColor:'#FF333344'});
   } else if(type==='decor'){
     Object.assign(el,{w:300,h:40,fillColor:'#FF4A4745',cornerRadius:'0 0 0 0'});
@@ -376,17 +376,20 @@ function renderEl(el){
     const val=parseFloat(s.s||50); const max=el.maxValue||100;
     const pct=Math.min(1,Math.max(0,val/max));
     const rw=el.ringWidth||12;
-    const r=Math.max(10,(el.perimeter||127)/(2*Math.PI));
+    // Perimeter = diameter of the ring circle (not circumference)
+    // r is inset by half ringWidth so stroke stays inside bounding box
+    const diam=el.perimeter||200;
+    const r=Math.max(5, diam/2 - rw/2);
     const circ=2*Math.PI*r;
     const dash=circ*pct; const gap=circ-dash;
     const cx=el.w/2, cy=el.h/2;
     const bgStroke=a2css(el.backColor||'#FF333344');
     const fgStroke=a2css(el.indexColor||'#FF00B3EA');
-    const labelSize=Math.max(10,Math.round(r*0.55));
-    inner.innerHTML=`<div class="ring-wrap"><svg width="${el.w}" height="${el.h}" viewBox="0 0 ${el.w} ${el.h}" style="overflow:visible">
-      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${bgStroke}" stroke-width="${rw}"/>
-      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${fgStroke}" stroke-width="${rw}" stroke-dasharray="${dash.toFixed(2)} ${gap.toFixed(2)}" stroke-linecap="butt" transform="rotate(-90 ${cx} ${cy})"/>
-      <text x="${cx}" y="${cy+labelSize*0.35}" text-anchor="middle" dominant-baseline="middle" fill="${fgStroke}" font-size="${labelSize}px" font-weight="700">${Math.round(val)}</text>
+    const labelSize=Math.max(10,Math.round(r*0.5));
+    inner.innerHTML=`<div class="ring-wrap"><svg width="${el.w}" height="${el.h}" viewBox="0 0 ${el.w} ${el.h}">
+      <circle cx="${cx}" cy="${cy}" r="${r.toFixed(2)}" fill="none" stroke="${bgStroke}" stroke-width="${rw}"/>
+      <circle cx="${cx}" cy="${cy}" r="${r.toFixed(2)}" fill="none" stroke="${fgStroke}" stroke-width="${rw}" stroke-dasharray="${dash.toFixed(2)} ${gap.toFixed(2)}" stroke-linecap="butt" transform="rotate(-90 ${cx} ${cy})"/>
+      <text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="central" fill="${fgStroke}" font-size="${labelSize}px" font-weight="700">${Math.round(val)}</text>
     </svg></div>`;
   } else if(el.type==='image'){
     inner.innerHTML=el.data?`<img src="${el.data}" style="width:100%;height:100%;object-fit:cover;display:block">`:'<div class="iph">📷<span>'+( el.filename||'image')+'</span></div>';
@@ -417,9 +420,27 @@ function makeResize(div,el){
   h.addEventListener('mousedown',e=>{
     e.stopPropagation();e.preventDefault();
     const ox=e.clientX,oy=e.clientY,ow=el.w||100,oh=el.h||40;
-    const mm=e2=>{el.w=Math.max(10,Math.round(ow+(e2.clientX-ox)/zoom));el.h=Math.max(6,Math.round(oh+(e2.clientY-oy)/zoom));div.style.width=el.w+'px';div.style.height=el.h+'px';renderEl(el);if(selId===el.id)updSizeInputs(el);};
+    const mm=e2=>{
+      const dx=(e2.clientX-ox)/zoom;
+      const dy=(e2.clientY-oy)/zoom;
+      if(el.type==='ring'){
+        // Keep ring square; sync perimeter (diameter) to new size
+        const d=Math.max(dx,dy);
+        const newSize=Math.max(20,Math.round(ow+d));
+        el.w=newSize; el.h=newSize;
+        el.perimeter=newSize;
+      } else {
+        el.w=Math.max(10,Math.round(ow+dx));
+        el.h=Math.max(6,Math.round(oh+dy));
+      }
+      div.style.width=el.w+'px';
+      div.style.height=el.h+'px';
+      renderEl(el);
+      if(selId===el.id)updSizeInputs(el);
+    };
     const mu=()=>{document.removeEventListener('mousemove',mm);document.removeEventListener('mouseup',mu);};
-    document.addEventListener('mousemove',mm);document.addEventListener('mouseup',mu);
+    document.addEventListener('mousemove',mm);
+    document.addEventListener('mouseup',mu);
   });
 }
 
@@ -504,7 +525,7 @@ function renderProps(el){
     <div class="pr"><label>Sensor</label><select onchange="sp('dataKey',this.value,1)">${ro}</select></div>
     <div class="pr"><label>Max Value</label><input type="number" value="${el.maxValue||100}" onchange="sp('maxValue',+this.value,1)"></div>
     <div class="pr"><label>Ring Width</label><input type="number" value="${el.ringWidth||12}" onchange="sp('ringWidth',+this.value,1)"></div>
-    <div class="pr"><label>Perimeter</label><input type="number" value="${el.perimeter||127}" onchange="sp('perimeter',+this.value,1)"></div>
+    <div class="pr"><label>Diameter px</label><input type="number" id="pp" value="${el.perimeter||200}" onchange="sp('perimeter',+this.value,1)"></div>
     <div class="pr"><label>Color</label><input type="color" data-field="indexColor" value="${a2hex(el.indexColor)}" onchange="setArgbFromPicker(this)">
     <input type="number" min="0" max="255" style="width:48px" data-field="indexColor" value="${getAlpha(el.indexColor)}" onchange="setAlphaFromInput(this)"></div>
     <div class="pr"><label>BG Color</label><input type="color" data-field="backColor" value="${a2hex(el.backColor)}" onchange="setArgbFromPicker(this)">
@@ -549,7 +570,7 @@ function setAlphaFromInput(input){
 function a2hex(c){if(!c)return'#000000';if(c.length===9)return'#'+c.slice(3);return c.length===7?c:'#000000';}
 function getAlpha(c){if(!c||c.length<9)return 255;return parseInt(c.slice(1,3),16);}
 function updPosInputs(el){const px=document.getElementById('px'),py=document.getElementById('py');if(px)px.value=Math.round(el.x);if(py)py.value=Math.round(el.y);}
-function updSizeInputs(el){const pw=document.getElementById('pw'),ph=document.getElementById('ph');if(pw)pw.value=el.w;if(ph)ph.value=el.h;}
+function updSizeInputs(el){const pw=document.getElementById('pw'),ph=document.getElementById('ph');if(pw)pw.value=el.w;if(ph)ph.value=el.h;if(el.type==='ring'){const pp=document.getElementById('pp');if(pp)pp.value=el.perimeter;}}
 
 // ── LAYERS ────────────────────────────────────────────────────────────────
 function refreshLayers(){
@@ -657,7 +678,7 @@ function buildSetting(name){
       lines.push(`BorderLine:${parts.join(',')}`);
     } else if(el.type==='ring'){
       const parts=[`x@${fmt(el.x)}`,`y@${fmt(el.y)}`,`z@${el.z}`,
-        `RingWidth@${el.ringWidth||12}`,`Perimeter@${el.perimeter||127}`,
+        `RingWidth@${el.ringWidth||12}`,`Perimeter@${el.perimeter||200}`,
         `MaxValue@${el.maxValue||100}`,`IndexColor@${el.indexColor||'#FF00B3EA'}`,
         `BackColor@${el.backColor||'#00000000'}`,`data@${el.dataKey}`];
       lines.push(`RingProgressBar:${parts.join(',')}`);
