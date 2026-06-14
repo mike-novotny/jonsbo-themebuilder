@@ -225,7 +225,7 @@ select option{background:#1f1f25}
 <script>
 // ── STATE ──────────────────────────────────────────────────────────────────
 let ori='vertical', CW=462, CH=1920, zoom=0.4;
-let elems=[], selId=null, nid=1, nz=1;
+let elems=[], selId=null, nid=1, nz=1, niz=0;
 let backData=null;
 
 const SEN={
@@ -304,10 +304,17 @@ function loadImgLayer(){
   pick('image/png',f=>{
     const r=new FileReader();
     r.onload=e=>{
+      // Images always sit beneath all non-image assets.
+      // Give image z = next available low z (1, 2, 3...)
+      const imgElems=elems.filter(x=>x.type==='image');
+      const imgZ=imgElems.length>0?Math.max(...imgElems.map(x=>x.z))+1:1;
+      // Ensure all non-image elements are above this z
+      const nonImgElems=elems.filter(x=>x.type!=='image');
+      nonImgElems.forEach(x=>{if(x.z<=imgZ) x.z=imgZ+1+(niz++);});
       const el={id:'el_'+(nid++),type:'image',data:e.target.result,filename:f.name,
-        x:0,y:0,w:CW,h:CH,z:nz++,visible:true};
-      elems.push(el); renderEl(el); refreshLayers(); sel(el.id);
-      toast('Image layer: '+f.name);
+        x:0,y:0,w:CW,h:CH,z:imgZ,visible:true};
+      elems.push(el); elems.forEach(x=>renderEl(x)); refreshLayers(); sel(el.id);
+      toast('Image layer: '+f.name+' (z='+el.z+')');
     };
     r.readAsDataURL(f);
   });
@@ -323,17 +330,21 @@ function pick(accept,cb){
 // ── ADD ELEMENT ───────────────────────────────────────────────────────────
 function add(type,key,unit){
   const s=SEN[key]||{};
-  const id='el_'+(nid++); const z=nz++;
+  const id='el_'+(nid++);
+  // Non-image data elements always get z above all image layers
+  const imgMaxZ=elems.filter(x=>x.type==='image').reduce((m,x)=>Math.max(m,x.z),0);
+  const z=Math.max(nz++, imgMaxZ+1);
   const el={id,type,dataKey:key,unit:unit||s.u||'',
     x:Math.round(CW*0.1),y:Math.round(CH*0.1),z,visible:true,title:'',isDefaultText:type==='static'};
   if(type==='text'||type==='static'){
-    Object.assign(el,{w:300,h:70,fontSize:30,fontFamily:'HarmonyOS Sans SC',color:'#FFFFFFFF',bold:false});
+    Object.assign(el,{w:300,h:70,fontSize:30,fontFamily:'HarmonyOS Sans SC',color:'#FFFFFFFF',bold:false,scaleFont:true});
   } else if(type==='bar'){
     Object.assign(el,{w:300,h:40,fillColor:'#FF499CDE',borderColor:'#FFFFFFFF',bgColor:'#00000000',
       borderThickness:2,cornerRadius:'0 0 0 0',maxNum:s.max||100,animated:false});
   } else if(type==='ring'){
     Object.assign(el,{w:200,h:200,ringWidth:12,perimeter:200,maxValue:s.max||100,
-      indexColor:'#FF00B3EA',backColor:'#FF333344'});
+      indexColor:'#FF00B3EA',backColor:'#FF333344',
+      showLabel:true,labelColor:'#FFFFFFFF',labelFont:'HarmonyOS Sans SC'});
   } else if(type==='decor'){
     Object.assign(el,{w:300,h:40,fillColor:'#FF4A4745',cornerRadius:'0 0 0 0'});
   }
@@ -358,6 +369,8 @@ function renderEl(el){
   div.style.height=(el.h||40)+'px';
   div.style.zIndex=el.z+10;
   div.style.display=el.visible?'':'none';
+  // Reset pointer-events; image type sets its own none below
+  if(el.type!=='image') div.style.pointerEvents='';
   div.querySelector('.lz').textContent='z:'+el.z;
   const inner=div.querySelector('.ei2');
 
@@ -385,14 +398,21 @@ function renderEl(el){
     const cx=el.w/2, cy=el.h/2;
     const bgStroke=a2css(el.backColor||'#FF333344');
     const fgStroke=a2css(el.indexColor||'#FF00B3EA');
-    const labelSize=Math.max(10,Math.round(r*0.5));
+    const labelSize=el.labelSizeOverride>0 ? el.labelSizeOverride : Math.max(10,Math.round(r*0.5));
+    const lblColor=a2css(el.labelColor||'#FFFFFFFF');
+    const lblFont=el.labelFont||'HarmonyOS Sans SC';
+    const unitLabel=(SEN[el.dataKey]||{}).u||el.unit||'';
+    // Build combined label e.g. "46°C" on one line, unit smaller via tspan
+    const unitSize=Math.round(labelSize*0.65);
     inner.innerHTML=`<div class="ring-wrap"><svg width="${el.w}" height="${el.h}" viewBox="0 0 ${el.w} ${el.h}">
       <circle cx="${cx}" cy="${cy}" r="${r.toFixed(2)}" fill="none" stroke="${bgStroke}" stroke-width="${rw}"/>
       <circle cx="${cx}" cy="${cy}" r="${r.toFixed(2)}" fill="none" stroke="${fgStroke}" stroke-width="${rw}" stroke-dasharray="${dash.toFixed(2)} ${gap.toFixed(2)}" stroke-linecap="butt" transform="rotate(-90 ${cx} ${cy})"/>
-      <text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="central" fill="${fgStroke}" font-size="${labelSize}px" font-weight="700">${Math.round(val)}</text>
+      ${(()=>{if(el.showLabel===false)return '';const dy=-(Math.round(labelSize*0.15));return `<text text-anchor="middle" dominant-baseline="central" fill="${lblColor}" font-family="'${lblFont}',sans-serif" font-weight="700"><tspan x="${cx}" y="${cy}" font-size="${labelSize}px">${Math.round(val)}</tspan><tspan font-size="${unitSize}px" baseline-shift="super" dy="${dy}">${unitLabel}</tspan></text>`;})()}
     </svg></div>`;
   } else if(el.type==='image'){
-    inner.innerHTML=el.data?`<img src="${el.data}" style="width:100%;height:100%;object-fit:cover;display:block">`:'<div class="iph">📷<span>'+( el.filename||'image')+'</span></div>';
+    // pointer-events:none on the wrapper too so image never blocks element clicks
+    div.style.pointerEvents='none';
+    inner.innerHTML=el.data?`<img src="${el.data}" style="width:100%;height:100%;object-fit:cover;display:block;pointer-events:none">`:'<div class="iph" style="pointer-events:none">📷<span>'+( el.filename||'image')+'</span></div>';
   } else if(el.type==='decor'){
     inner.innerHTML=`<div class="dec-ph" style="background:${a2css(el.fillColor)};border-radius:${el.cornerRadius||0}">decor</div>`;
   }
@@ -420,6 +440,7 @@ function makeResize(div,el){
   h.addEventListener('mousedown',e=>{
     e.stopPropagation();e.preventDefault();
     const ox=e.clientX,oy=e.clientY,ow=el.w||100,oh=el.h||40;
+    if((el.type==='text'||el.type==='static') && el.scaleFont) el._baseFontSize=el.fontSize||30;
     const mm=e2=>{
       const dx=(e2.clientX-ox)/zoom;
       const dy=(e2.clientY-oy)/zoom;
@@ -427,11 +448,19 @@ function makeResize(div,el){
         // Keep ring square; sync perimeter (diameter) to new size
         const d=Math.max(dx,dy);
         const newSize=Math.max(20,Math.round(ow+d));
+        const ratio=newSize/ow;
         el.w=newSize; el.h=newSize;
         el.perimeter=newSize;
+        // Scale label size override proportionally if user had set a custom size
+        if(el.labelSizeOverride>0) el.labelSizeOverride=Math.max(6,Math.round(el.labelSizeOverride*ratio));
       } else {
         el.w=Math.max(10,Math.round(ow+dx));
         el.h=Math.max(6,Math.round(oh+dy));
+        // If text element has scaleFont on, scale fontSize proportionally to height change
+        if((el.type==='text'||el.type==='static') && el.scaleFont){
+          const ratio=el.h/Math.max(6,oh);
+          el.fontSize=Math.max(6,Math.round((el._baseFontSize||el.fontSize||30)*ratio));
+        }
       }
       div.style.width=el.w+'px';
       div.style.height=el.h+'px';
@@ -484,6 +513,7 @@ function renderProps(el){
       </div>`;
     }
     h+=`<div class="ps"><div class="pt">Font</div>
+    <div class="pr"><label>Scale w/resize</label><input type="checkbox" ${el.scaleFont!==false?'checked':''} onchange="sp('scaleFont',this.checked,0)" title="Font size scales proportionally when you resize this element"></div>
     <div class="pr"><label>Size px</label><input type="number" value="${el.fontSize||30}" onchange="sp('fontSize',+this.value,1)"></div>
     <div class="pr"><label>Family</label>
       <select id="fontSel" onchange="pickFont(this.value)" style="flex:1;min-width:0">
@@ -530,6 +560,18 @@ function renderProps(el){
     <input type="number" min="0" max="255" style="width:48px" data-field="indexColor" value="${getAlpha(el.indexColor)}" onchange="setAlphaFromInput(this)"></div>
     <div class="pr"><label>BG Color</label><input type="color" data-field="backColor" value="${a2hex(el.backColor)}" onchange="setArgbFromPicker(this)">
     <input type="number" min="0" max="255" style="width:48px" data-field="backColor" value="${getAlpha(el.backColor)}" onchange="setAlphaFromInput(this)"></div>
+    </div>
+    <div class="ps"><div class="pt">Label Inside Ring</div>
+    <div class="pr"><label>Show label</label><input type="checkbox" ${el.showLabel!==false?'checked':''} onchange="sp('showLabel',this.checked,1)" title="Show sensor value text centered inside the ring"></div>
+    <div class="pr"><label>Manual size</label><input type="checkbox" ${el.manualLabelSize?'checked':''} onchange="toggleManualLabelSize(this.checked)" title="Override the auto-calculated label size"></div>
+    <div class="pr"><label>Label size</label><input type="number" id="rlsz" value="${el.labelSizeOverride>0?el.labelSizeOverride:Math.max(10,Math.round((el.perimeter/2-el.ringWidth/2)*0.5))}" min="1" ${el.manualLabelSize?'':'disabled style="opacity:0.4"'} onchange="sp('labelSizeOverride',+this.value,1)" title="Manual label size in px"></div>
+    <div class="pr"><label>Label color</label><input type="color" data-field="labelColor" value="${a2hex(el.labelColor||'#FFFFFFFF')}" onchange="setArgbFromPicker(this)">
+    <input type="number" min="0" max="255" style="width:48px" data-field="labelColor" value="${getAlpha(el.labelColor||'#FFFFFFFF')}" onchange="setAlphaFromInput(this)"></div>
+    <div class="pr"><label>Label font</label>
+      <select onchange="spRingFont(this.value)" style="flex:1;min-width:0">
+        ${buildFontOptions(el.labelFont||'HarmonyOS Sans SC')}
+      </select>
+    </div>
     </div>`;
   }
 
@@ -547,6 +589,20 @@ function renderProps(el){
 function sp(k,v,refresh){
   const el=elems.find(e=>e.id===selId);if(!el)return;
   el[k]=v; if(refresh){renderEl(el);refreshLayers();} updStatus();
+}
+function spRingFont(v){
+  const el=elems.find(e=>e.id===selId);if(!el)return;
+  el.labelFont=v; renderEl(el);
+}
+function toggleManualLabelSize(checked){
+  const el=elems.find(e=>e.id===selId);if(!el)return;
+  el.manualLabelSize=checked;
+  if(!checked){
+    // Return to auto: clear override
+    el.labelSizeOverride=0;
+  }
+  renderEl(el);
+  renderProps(el); // refresh props so input enables/disables
 }
 // Read current alpha from the element's stored color, combine with new hex from picker
 function setArgbFromPicker(input){
@@ -638,8 +694,31 @@ async function exportTheme(){
     src.file(el.filename||'d1.png',blob);
   }
 
-  // Generate demo.png from canvas (simple html2canvas-less approach: SVG snapshot)
-  // We'll create a placeholder note instead since we can't render without html2canvas
+  // Attempt to export font files for fonts loaded via system font API
+  const fontFolder=root.folder('font');
+  const usedFonts=[...new Set(elems.filter(e=>e.fontFamily||e.labelFont).map(e=>[e.fontFamily,e.labelFont]).flat().filter(Boolean))];
+  let fontsCopied=0;
+  if(window.queryLocalFonts){
+    try{
+      const allSysFonts=await window.queryLocalFonts();
+      for(const fname of usedFonts){
+        const match=allSysFonts.find(f=>f.family===fname||f.fullName===fname||f.postscriptName===fname);
+        if(match){
+          try{
+            const blob=await match.blob();
+            const safeName=fname.replace(/[^a-zA-Z0-9_\-一-鿿]/g,'_');
+            fontFolder.file(safeName+'.ttf',blob);
+            fontsCopied++;
+          }catch(e2){/* font blob not available, skip */}
+        }
+      }
+    }catch(e){/* permission not granted */}
+  }
+  if(fontsCopied===0 && usedFonts.length>0){
+    const noteLines=['Fonts used in this theme:'].concat(usedFonts).concat(['','Install these fonts on the display device and copy the .ttf files into this font/ folder.','Tip: Open the builder in Chrome/Edge and click "Load System Fonts" to enable auto font export.']);
+    fontFolder.file('FONTS_NOTE.txt', noteLines.join('\n'));
+  }
+
   root.file('demo_NOTE.txt','Take a screenshot of the canvas preview and save as demo.png in this folder.');
 
   const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:6}});
@@ -653,7 +732,20 @@ async function exportTheme(){
 
 function buildSetting(name){
   let lines=[`name:${name}`,`width:${CW}`,`height:${CH}`];
-  const sorted=[...elems].filter(e=>e.visible).sort((a,b)=>b.z-a.z);
+  // Guarantee images sit beneath all other elements at export time
+  const visible=elems.filter(e=>e.visible);
+  const imgs=visible.filter(e=>e.type==='image');
+  const assets=visible.filter(e=>e.type!=='image');
+  const minAssetZ=assets.length>0?Math.min(...assets.map(x=>x.z)):100;
+  const maxImgZ=imgs.length>0?Math.max(...imgs.map(x=>x.z)):0;
+  let exportElems=visible;
+  if(imgs.length>0&&assets.length>0&&maxImgZ>=minAssetZ){
+    // Remap image z values below all assets without modifying actual elements
+    const imgsSorted=[...imgs].sort((a,b)=>a.z-b.z);
+    let zi=minAssetZ-imgsSorted.length;
+    exportElems=assets.concat(imgsSorted.map((img,i)=>({...img,z:zi+i})));
+  }
+  const sorted=[...exportElems].sort((a,b)=>b.z-a.z);
   sorted.forEach(el=>{
     if(el.type==='text'||el.type==='static'){
       const parts=[`x@${fmt(el.x)}`,`y@${fmt(el.y)}`,`z@${el.z}`,

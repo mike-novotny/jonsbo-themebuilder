@@ -28,6 +28,8 @@ A browser-based visual editor for creating custom themes for the **Jonsbo 916** 
 
 ## Installing a Theme on the Device
 
+> **Important:** The Jonsbo AIO application must be **completely closed** before copying theme files. Check the system tray (bottom-right corner of the taskbar, click the `^` arrow to show hidden icons) and right-click the Jonsbo icon → **Exit** to fully close it. Simply closing the main window may leave it running in the tray.
+
 1. Export your theme as a ZIP from the Theme Builder
 2. Extract the ZIP — you will get a folder named after your theme
 3. Copy the entire theme folder into the Jonsbo programme directory:
@@ -54,16 +56,18 @@ C:\Users\<YourUsername>\AppData\Local\JONSBO-AIO\Programme\
         └── d2.png
 ```
 
-5. Restart the Jonsbo AIO software or refresh the theme list — your theme should now appear in the theme browser.
+5. Launch the Jonsbo AIO application
+6. Navigate to **Screen Vertical** or **Screen Horizontal** depending on your theme orientation — your new theme will appear in the list there
+7. Select your theme and apply it
 
-> **demo.png** — This is the thumbnail shown in the theme browser. Take a screenshot of the canvas preview in the Theme Builder, crop it to the theme dimensions, and save it as `demo.png` inside the theme folder.
+> **demo.png** — This is the thumbnail shown in the theme browser. Take a screenshot of the canvas preview in the Theme Builder, crop it to the theme dimensions, and save it as `demo.png` inside the theme folder. Without it the theme will still work but will show a blank thumbnail.
 
 ### Font Installation
 
 If your theme uses custom fonts, the font files must be installed in **two places**:
 
-- Inside the theme's `font\` folder (so the theme package is self-contained)
-- Installed on the Windows system running the Jonsbo software (right-click the `.ttf` file → **Install**)
+- Inside the theme's `font\` folder (so the theme package is self-contained for sharing)
+- Installed on the Windows system running the Jonsbo software — right-click the `.ttf` file in Windows Explorer and select **Install** or **Install for all users**
 
 The `FontFamily` name in `Setting.txt` must match the font's internal name as Windows recognises it, which is not always the same as the filename.
 
@@ -148,6 +152,58 @@ Fonts found across the official Jonsbo 916 built-in themes:
 | `猫啃忘形圆` | Chinese display, rounded |
 
 Any `.ttf` or `.otf` font installed on the display device can be referenced by name.
+
+---
+
+## Preparing Image Assets
+
+Themes are built from layered PNG images combined with live data elements. Understanding the image dimensions and naming conventions is essential before you start designing.
+
+### Canvas Dimensions
+
+| Orientation | Width | Height |
+|-------------|-------|--------|
+| Vertical | 462 px | 1920 px |
+| Horizontal | 1920 px | 462 px |
+
+All images must be created at exactly these dimensions so they align perfectly with the canvas coordinates in `Setting.txt`.
+
+### Image Files and Their Roles
+
+| Filename | Role | Notes |
+|----------|------|-------|
+| `back.png` | Background image | Loaded separately by the display software behind all layers. Often a photo or illustration. |
+| `d1.png` | Layer 1 (bottom) | First composited image layer. Usually the main background art or a dark base panel. |
+| `d2.png` | Layer 2 | Overlay art — UI chrome, panel frames, decorative borders, character art with transparent background. |
+| `d3.png`, `d4.png`… | Additional layers | Use as many as needed, named sequentially. |
+
+All image layers go in the `source\` folder inside your theme directory.
+
+### Creating the Images
+
+**Recommended workflow in Photoshop, GIMP, or similar:**
+
+1. Create a new document at **462 × 1920 px** (vertical) or **1920 × 462 px** (horizontal), 72 dpi, RGB
+2. Design your background — photo, illustration, or solid/gradient. Save a flattened copy as `back.png`
+3. For layered artwork (e.g. a robot character over a background), separate the layers:
+   - `d1.png` — background scene, full canvas, no transparency needed
+   - `d2.png` — foreground elements (character, UI frames, overlays) on a **transparent background** — export as PNG-24 with transparency
+4. Leave blank/transparent areas in `d2.png` wherever live data text and bars will appear — those are rendered on top by the display software
+
+**Background removal:** If your source image has a solid background you want to remove for `d2.png`, use Photoshop's "Remove Background" button, GIMP's fuzzy select + delete, or an online tool like remove.bg.
+
+**Saving:** Always export as PNG (not JPG) to preserve transparency and avoid compression artefacts on text-adjacent areas.
+
+### Z-Order and Layering
+
+Image layers must have lower z-values than all data elements (text, bars, ring gauges) so they don't cover them. The Theme Builder enforces this automatically — when you add an image layer, it is placed beneath all existing data elements. At export, the `Setting.txt` z-values are also verified to ensure images never sit above data assets.
+
+A typical z-order stack:
+```
+z = 1     d1.png   ← bottom background
+z = 2     d2.png   ← foreground art overlay
+z = 10+   Text, BorderLine, RingProgressBar elements
+```
 
 ---
 
@@ -312,6 +368,21 @@ Design your `d1.png` background and `d2.png` overlay in an image editor (Photosh
 ---
 
 ## Version History
+
+### v5
+- "Scale w/resize" checkbox now defaults to on and moved to top of Font section
+- Ring gauge label renders value and unit on a single line (e.g. 46°C) using SVG tspan, sized to fit inside the ring
+- Ring label "Manual size" checkbox: label size input is disabled until checked; unchecking returns to auto-size
+- Image layers are automatically placed below all data assets in both the canvas and exported Setting.txt
+- Font files are auto-exported into the theme ZIP `font/` folder when system fonts are loaded in Chrome/Edge
+- Image preparation documentation added to README with canvas dimensions, file naming, and layering guide
+
+### v4
+- Text elements have a "Scale w/resize" checkbox — when enabled, font size scales proportionally as you drag to resize
+- Ring gauges have a built-in label option: "Show label" checkbox displays the sensor value and unit centered inside the ring, auto-sized to the ring diameter
+- Ring label has its own color, font, and manual size override controls
+- Ring label and gauge resize together as one unit — label size scales with the ring
+- Ring gauge resize is constrained to square (equal width and height) and syncs the Diameter field live
 
 ### v3
 - Font picker with built-in theme fonts dropdown, system font loader (Chrome/Edge), and custom font entry
