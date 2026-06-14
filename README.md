@@ -95,14 +95,17 @@ When you click Export ZIP, the download contains:
 ThemeName/
 ├── Setting.txt          ← main layout file (auto-generated)
 ├── ThemeName.json       ← theme config (auto-generated)
-├── demo_NOTE.txt        ← reminder to add a screenshot as demo.png
+├── demo.png             ← auto-captured preview thumbnail
+├── back.png             ← background image in ROOT (device checks here first)
 ├── font/
 │   └── (place your .ttf font files here)
 └── source/
-    ├── back.png         ← your background image (auto-included if loaded)
+    ├── back.png         ← background image copy in source/ (auto-included)
     ├── d1.png           ← image layers (auto-included if loaded)
     └── d2.png
 ```
+
+> **back.png must exist in both locations.** The Jonsbo software looks for `back.png` in the theme root folder. The `source/` copy is kept for completeness. The Theme Builder exports it to both automatically.
 
 ---
 

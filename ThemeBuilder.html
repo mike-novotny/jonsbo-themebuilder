@@ -43,6 +43,10 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 #cw{flex:1;overflow:auto;background:#0a0a0c;display:flex;align-items:flex-start;justify-content:center;padding:20px;position:relative}
 #co{position:relative;transform-origin:top center}
 #canvas{position:relative;background:#1a1a1e;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.8)}
+.snap-line{position:absolute;pointer-events:none;z-index:1000;opacity:0;transition:opacity .15s}
+.snap-line.snap-h{left:0;right:0;height:1px;background:rgba(255,200,0,.8);box-shadow:0 0 3px rgba(255,200,0,.5)}
+.snap-line.snap-v{top:0;bottom:0;width:1px;background:rgba(255,200,0,.8);box-shadow:0 0 3px rgba(255,200,0,.5)}
+.snap-line.show{opacity:1}
 #backImg{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;z-index:0;pointer-events:none}
 .ce{position:absolute;cursor:move;user-select:none}
 .ce.sel .ei2{outline:2px solid var(--accent)!important;outline-offset:0}
@@ -128,8 +132,8 @@ select option{background:#1f1f25}
 
       <div class="egrp">
         <div class="egtitle">⏱ Time & Date</div>
-        <div class="ei" onclick="add('text','CurrentTime','')"><div class="eico ic-t">T</div><div><div class="elabel">Current Time</div><div class="esub">CurrentTime</div></div></div>
-        <div class="ei" onclick="add('text','CurrentTimeShut','')"><div class="eico ic-t">T</div><div><div class="elabel">Time (Shutdown)</div><div class="esub">CurrentTimeShut</div></div></div>
+        <div class="ei" onclick="add('text','CurrentTimeShut','')"><div class="eico ic-t">T</div><div><div class="elabel">Time HH:MM</div><div class="esub">CurrentTimeShut — No seconds</div></div></div>
+        <div class="ei" onclick="add('text','CurrentTime','')"><div class="eico ic-t">T</div><div><div class="elabel">Time HH:MM:SS</div><div class="esub">CurrentTime — With seconds</div></div></div>
         <div class="ei" onclick="add('text','CurrentDates','')"><div class="eico ic-t">T</div><div><div class="elabel">Date</div><div class="esub">CurrentDates</div></div></div>
         <div class="ei" onclick="add('text','WeekDaysL3','')"><div class="eico ic-t">T</div><div><div class="elabel">Day of Week</div><div class="esub">WeekDaysL3 (Mon)</div></div></div>
       </div>
@@ -200,7 +204,11 @@ select option{background:#1f1f25}
   <!-- CANVAS + LAYERS -->
   <div style="flex:1;display:flex;flex-direction:column;overflow:hidden">
     <div id="cw" onclick="desel(event)" ondragover="cwDragOver(event)" ondrop="cwDrop(event)">
-      <div id="co"><div id="canvas"><img id="backImg" src="" style="display:none"></div></div>
+      <div id="co"><div id="canvas">
+  <img id="backImg" src="" style="display:none">
+  <div class="snap-line snap-h" id="snapH" style="top:50%"></div>
+  <div class="snap-line snap-v" id="snapV" style="left:50%"></div>
+</div></div>
     </div>
     <div id="lp">
       <div class="sh">Layers ↑ = front  (Del = delete, click = select)</div>
@@ -231,6 +239,9 @@ select option{background:#1f1f25}
 let ori='vertical', CW=462, CH=1920, zoom=0.4;
 let elems=[], selId=null, nid=1, nz=1, niz=0;
 let backData=null;
+let themeColors=['#FFFF0000','#FFFF9500','#FFFFFFFF','#FF000000','#FF00B3EA','#FF66BB17'];
+let snapEnabled=true;
+let fontFiles={}; // family name -> {name, data (ArrayBuffer)}
 
 const SEN={
   CpuUsage:{l:'CPU Usage',u:'%',max:100,s:'54'},
@@ -256,8 +267,8 @@ const SEN={
   GPUName:{l:'GPU Name',u:'',max:null,s:'RTX 4090'},
   DownNetSpeed:{l:'Download',u:'',max:null,s:'120 MB/s'},
   UpNetSpeed:{l:'Upload',u:'',max:null,s:'25 MB/s'},
-  CurrentTime:{l:'Time',u:'',max:null,s:'14:35'},
-  CurrentTimeShut:{l:'Time(Shut)',u:'',max:null,s:'14:35:00'},
+  CurrentTime:{l:'Time HH:MM:SS (24h)',u:'',max:null,s:'14:35:22'},
+  CurrentTimeShut:{l:'Time HH:MM (No Seconds)',u:'',max:null,s:'14:35'},
   CurrentDates:{l:'Date',u:'',max:null,s:'2025.09.22'},
   WeekDaysL3:{l:'Day',u:'',max:null,s:'Mon'},
 };
@@ -344,9 +355,9 @@ function add(type,key,unit){
     Object.assign(el,{w:300,h:70,fontSize:30,fontFamily:'HarmonyOS Sans SC',color:'#FFFFFFFF',bold:false,scaleFont:true});
   } else if(type==='bar'){
     Object.assign(el,{w:300,h:40,fillColor:'#FF499CDE',borderColor:'#FFFFFFFF',bgColor:'#00000000',
-      borderThickness:2,cornerRadius:'0 0 0 0',maxNum:s.max||100,animated:false});
+      borderThickness:2,cornerRadius:'0 0 0 0',maxNum:100,animated:true});
   } else if(type==='ring'){
-    Object.assign(el,{w:200,h:200,ringWidth:12,perimeter:200,maxValue:s.max||100,
+    Object.assign(el,{w:200,h:200,ringWidth:12,perimeter:200,maxValue:100,
       indexColor:'#FF00B3EA',backColor:'#FF333344',
       showLabel:true,labelColor:'#FFFFFFFF',labelFont:'HarmonyOS Sans SC'});
   } else if(type==='decor'){
@@ -397,23 +408,25 @@ function renderEl(el){
       inner.style.cssText='display:flex;align-items:center;justify-content:center;width:100%;height:100%;overflow:hidden';
       inner.innerHTML=`<span style="font-size:${el.fontSize||30}px;font-family:'${el.fontFamily||'Arial'}',sans-serif;color:${a2css(el.color)};font-weight:${el.bold?700:400};text-align:center;line-height:1;pointer-events:none">${pre}${val}${u}</span>`;
     } else {
-      inner.style.cssText='';
-      inner.innerHTML=`<span class="tp" style="font-size:${el.fontSize||30}px;font-family:'${el.fontFamily||'Arial'}',sans-serif;color:${a2css(el.color)};font-weight:${el.bold?700:400}">${pre}${val}${u}</span>`;
-      // Auto-size only for non-ring-label text elements
-      requestAnimationFrame(()=>{
+      // Render text in a bounded box matching maxwidth/maxheight (device behavior)
+      // Text is clipped to this box just like on the device
+      inner.style.cssText='overflow:hidden;width:100%;height:100%';
+      inner.innerHTML=`<span class="tp" style="font-size:${el.fontSize||30}px;font-family:'${el.fontFamily||'Arial'}',sans-serif;color:${a2css(el.color)};font-weight:${el.bold?700:400};display:block;white-space:nowrap">${pre}${val}${u}</span>`;
+      // Use two rAF passes: first lets DOM update, second measures after fonts paint
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{
         const span=inner.querySelector('.tp');
-        if(span){
-          const sw=Math.ceil(span.scrollWidth)+2;
-          const sh=Math.ceil(span.scrollHeight)+2;
-          if(sw>4&&sh>4){
-            el.w=sw; el.h=sh;
-            div.style.width=sw+'px'; div.style.height=sh+'px';
-            const pw=document.getElementById('pw'),ph=document.getElementById('ph');
-            if(pw&&selId===el.id) pw.value=sw;
-            if(ph&&selId===el.id) ph.value=sh;
-          }
+        if(!span) return;
+        // Force layout
+        span.style.display='none'; span.offsetHeight; span.style.display='';
+        const sw=Math.ceil(span.scrollWidth)+4;
+        const sh=Math.ceil(span.scrollHeight)+4;
+        if(sw>4&&sh>4){
+          el.w=sw; el.h=sh;
+          div.style.width=sw+'px'; div.style.height=sh+'px';
+          const pw=document.getElementById('pw'),ph=document.getElementById('ph');
+          if(pw&&selId===el.id){pw.value=sw;ph.value=sh;}
         }
-      });
+      }));
     }
   } else if(el.type==='bar'){
     const s=SEN[el.dataKey]||{s:50};
@@ -463,12 +476,13 @@ function makeDrag(div,el){
     const mm=e2=>{
       el.x=Math.round(ex+(e2.clientX-ox)/zoom);
       el.y=Math.round(ey+(e2.clientY-oy)/zoom);
+      checkSnap(el);
       div.style.left=el.x+'px';
       div.style.top=el.y+'px';
       if(el.type==='ring') syncRingLabel(el);
       if(selId===el.id) updPosInputs(el);
     };
-    const mu=()=>{document.removeEventListener('mousemove',mm);document.removeEventListener('mouseup',mu);};
+    const mu=()=>{hideSnapLines();document.removeEventListener('mousemove',mm);document.removeEventListener('mouseup',mu);};
     document.addEventListener('mousemove',mm);document.addEventListener('mouseup',mu);
   });
 }
@@ -504,7 +518,7 @@ function makeResize(div,el){
       renderEl(el);
       if(selId===el.id)updSizeInputs(el);
     };
-    const mu=()=>{document.removeEventListener('mousemove',mm);document.removeEventListener('mouseup',mu);};
+    const mu=()=>{hideSnapLines();document.removeEventListener('mousemove',mm);document.removeEventListener('mouseup',mu);};
     document.addEventListener('mousemove',mm);
     document.addEventListener('mouseup',mu);
   });
@@ -534,6 +548,37 @@ function renderProps(el){
   <div class="pr"><label>Width</label><input type="number" id="pw" value="${el.w||100}" onchange="sp('w',+this.value,1)"></div>
   <div class="pr"><label>Height</label><input type="number" id="ph" value="${el.h||40}" onchange="sp('h',+this.value,1)"></div>
   <div class="pr"><label>Z-Order</label><input type="number" value="${el.z}" onchange="sp('z',+this.value,1)"></div>
+  </div>
+  <div class="ps"><div class="pt">Snap & Align</div>
+  <div class="pr"><label>Center</label>
+    <button class="btn" style="flex:1;font-size:10px" onclick="snapCenter('h')" title="Center horizontally on canvas">↔ H Center</button>
+    <button class="btn" style="flex:1;font-size:10px" onclick="snapCenter('v')" title="Center vertically on canvas">↕ V Center</button>
+  </div>
+  <div class="pr"><label>Canvas edge</label>
+    <button class="btn" style="flex:1;font-size:10px" onclick="snapEdge('left')">⇤ L</button>
+    <button class="btn" style="flex:1;font-size:10px" onclick="snapEdge('right')">⇥ R</button>
+    <button class="btn" style="flex:1;font-size:10px" onclick="snapEdge('top')">⇡ T</button>
+    <button class="btn" style="flex:1;font-size:10px" onclick="snapEdge('bottom')">⇣ B</button>
+  </div>
+  <div class="pr"><label>Align to</label>
+    <select id="alignTarget" style="flex:1;min-width:0;font-size:10px">
+      <option value="">— pick element —</option>
+      ${elems.filter(e=>e.id!==el.id).map(e=>`<option value="${e.id}">${SEN[e.dataKey]?.l||e.title||e.filename||e.type} z${e.z}</option>`).join('')}
+    </select>
+  </div>
+  <div class="pr"><label></label>
+    <button class="btn" style="flex:1;font-size:10px" onclick="alignToElem('left')">⇤ L-edge</button>
+    <button class="btn" style="flex:1;font-size:10px" onclick="alignToElem('right')">⇥ R-edge</button>
+  </div>
+  <div class="pr"><label></label>
+    <button class="btn" style="flex:1;font-size:10px" onclick="alignToElem('top')">⇡ T-edge</button>
+    <button class="btn" style="flex:1;font-size:10px" onclick="alignToElem('bottom')">⇣ B-edge</button>
+  </div>
+  <div class="pr"><label></label>
+    <button class="btn" style="flex:1;font-size:10px" onclick="alignToElem('centerH')">↕ V-center</button>
+    <button class="btn" style="flex:1;font-size:10px" onclick="alignToElem('centerV')">↔ H-center</button>
+  </div>
+  <div class="pr"><label>Snap drag</label><input type="checkbox" id="snapDrag" ${snapEnabled?'checked':''} onchange="snapEnabled=this.checked" title="Snap to center lines while dragging"></div>
   </div>`;
 
   if(el.type==='text'||el.type==='static'){
@@ -563,8 +608,13 @@ function renderProps(el){
     <div class="pr"><label></label>
       <button class="btn" style="flex:1;font-size:11px" onclick="loadSystemFonts()">🔍 Load System Fonts</button>
     </div>
+    <div class="pr"><label></label>
+      <button class="btn" style="flex:1;font-size:11px" onclick="loadFontFile()" title="Load a .ttf font file so it can be included in the ZIP export">📁 Add Font File</button>
+    </div>
     <div class="pr"><label>Color</label><input type="color" data-field="color" value="${a2hex(el.color)}" onchange="setArgbFromPicker(this)">
-    <input type="number" min="0" max="255" style="width:48px" data-field="color" value="${getAlpha(el.color)}" placeholder="A" onchange="setAlphaFromInput(this)"></div>
+    <input type="number" min="0" max="255" style="width:48px" data-field="color" value="${getAlpha(el.color)}" placeholder="A" onchange="setAlphaFromInput(this)">
+    <button class="btn" style="font-size:10px;padding:2px 6px" onclick="saveThemeColor(getElColor())" title="Save current color to palette">+</button></div>
+    <div class="pr"><label>Palette</label><div style="display:flex;gap:3px;flex-wrap:wrap;flex:1">${themeColors.map((tc,i)=>`<div onclick="applyThemeColor('color','${tc}')" title="${tc}" style="width:18px;height:18px;background:${a2css(tc)};border:1px solid rgba(255,255,255,.3);border-radius:2px;cursor:pointer;flex-shrink:0"></div>`).join('')}</div></div>
     <div class="pr"><label>Bold</label><input type="checkbox" ${el.bold?'checked':''} onchange="sp('bold',this.checked,1)"></div>
     </div>`;
   }
@@ -575,11 +625,17 @@ function renderProps(el){
     <div class="pr"><label>Sensor</label><select onchange="sp('dataKey',this.value,1)">${bo}</select></div>
     <div class="pr"><label>Max Value</label><input type="number" value="${el.maxNum||100}" onchange="sp('maxNum',+this.value,1)"></div>
     <div class="pr"><label>Fill</label><input type="color" data-field="fillColor" value="${a2hex(el.fillColor)}" onchange="setArgbFromPicker(this)">
-    <input type="number" min="0" max="255" style="width:48px" data-field="fillColor" value="${getAlpha(el.fillColor)}" onchange="setAlphaFromInput(this)"></div>
+    <input type="number" min="0" max="255" style="width:48px" data-field="fillColor" value="${getAlpha(el.fillColor)}" onchange="setAlphaFromInput(this)">
+    <button class="btn" style="font-size:10px;padding:2px 6px" onclick="saveThemeColor(elems.find(e=>e.id===selId)?.fillColor)" title="Save to palette">+</button></div>
+    <div class="pr"><label></label><div style="display:flex;gap:3px;flex-wrap:wrap;flex:1">${themeColors.map(tc=>`<div onclick=\"applyThemeColor('fillColor','${tc}')\" title="${tc}" style="width:18px;height:18px;background:${a2css(tc)};border:1px solid rgba(255,255,255,.3);border-radius:2px;cursor:pointer;flex-shrink:0"></div>`).join('')}</div></div>
     <div class="pr"><label>Border</label><input type="color" data-field="borderColor" value="${a2hex(el.borderColor)}" onchange="setArgbFromPicker(this)">
-    <input type="number" min="0" max="255" style="width:48px" data-field="borderColor" value="${getAlpha(el.borderColor)}" onchange="setAlphaFromInput(this)"></div>
+    <input type="number" min="0" max="255" style="width:48px" data-field="borderColor" value="${getAlpha(el.borderColor)}" onchange="setAlphaFromInput(this)">
+    <button class="btn" style="font-size:10px;padding:2px 6px" onclick="saveThemeColor(elems.find(e=>e.id===selId)?.borderColor)" title="Save to palette">+</button></div>
+    <div class="pr"><label></label><div style="display:flex;gap:3px;flex-wrap:wrap;flex:1">${themeColors.map(tc=>`<div onclick=\"applyThemeColor('borderColor','${tc}')\" title="${tc}" style="width:18px;height:18px;background:${a2css(tc)};border:1px solid rgba(255,255,255,.3);border-radius:2px;cursor:pointer;flex-shrink:0"></div>`).join('')}</div></div>
     <div class="pr"><label>Background</label><input type="color" data-field="bgColor" value="${a2hex(el.bgColor)}" onchange="setArgbFromPicker(this)">
-    <input type="number" min="0" max="255" style="width:48px" data-field="bgColor" value="${getAlpha(el.bgColor)}" onchange="setAlphaFromInput(this)"></div>
+    <input type="number" min="0" max="255" style="width:48px" data-field="bgColor" value="${getAlpha(el.bgColor)}" onchange="setAlphaFromInput(this)">
+    <button class="btn" style="font-size:10px;padding:2px 6px" onclick="saveThemeColor(elems.find(e=>e.id===selId)?.bgColor)" title="Save to palette">+</button></div>
+    <div class="pr"><label></label><div style="display:flex;gap:3px;flex-wrap:wrap;flex:1">${themeColors.map(tc=>`<div onclick=\"applyThemeColor('bgColor','${tc}')\" title="${tc}" style="width:18px;height:18px;background:${a2css(tc)};border:1px solid rgba(255,255,255,.3);border-radius:2px;cursor:pointer;flex-shrink:0"></div>`).join('')}</div></div>
     <div class="pr"><label>Border px</label><input type="number" value="${el.borderThickness||2}" onchange="sp('borderThickness',+this.value,1)"></div>
     <div class="pr"><label>Corner R</label><input type="text" value="${el.cornerRadius||'0 0 0 0'}" onchange="sp('cornerRadius',this.value,1)"></div>
     <div class="pr"><label>Animated</label><input type="checkbox" ${el.animated?'checked':''} onchange="sp('animated',this.checked,0)"></div>
@@ -592,18 +648,24 @@ function renderProps(el){
     <div class="pr"><label>Sensor</label><select onchange="sp('dataKey',this.value,1)">${ro}</select></div>
     <div class="pr"><label>Max Value</label><input type="number" value="${el.maxValue||100}" onchange="sp('maxValue',+this.value,1)"></div>
     <div class="pr"><label>Ring Width</label><input type="number" value="${el.ringWidth||12}" onchange="sp('ringWidth',+this.value,1)"></div>
-    <div class="pr"><label>Diameter px</label><input type="number" id="pp" value="${el.perimeter||200}" onchange="sp('perimeter',+this.value,1)"></div>
-    <div class="pr"><label>Color</label><input type="color" data-field="indexColor" value="${a2hex(el.indexColor)}" onchange="setArgbFromPicker(this)">
-    <input type="number" min="0" max="255" style="width:48px" data-field="indexColor" value="${getAlpha(el.indexColor)}" onchange="setAlphaFromInput(this)"></div>
-    <div class="pr"><label>BG Color</label><input type="color" data-field="backColor" value="${a2hex(el.backColor)}" onchange="setArgbFromPicker(this)">
-    <input type="number" min="0" max="255" style="width:48px" data-field="backColor" value="${getAlpha(el.backColor)}" onchange="setAlphaFromInput(this)"></div>
+    <div class="pr"><label>Diameter px</label><input type="number" id="pp" value="${el.perimeter||200}" onchange="setRingDiameter(+this.value)"></div>
+    <div class="pr"><label>Arc Color</label><input type="color" data-field="indexColor" value="${a2hex(el.indexColor)}" onchange="setArgbFromPicker(this)">
+    <input type="number" min="0" max="255" style="width:48px" data-field="indexColor" value="${getAlpha(el.indexColor)}" onchange="setAlphaFromInput(this)">
+    <button class="btn" style="font-size:10px;padding:2px 6px" onclick="saveThemeColor(elems.find(e=>e.id===selId)?.indexColor)" title="Save to palette">+</button></div>
+    <div class="pr"><label></label><div style="display:flex;gap:3px;flex-wrap:wrap;flex:1">${themeColors.map(tc=>`<div onclick=\"applyThemeColor('indexColor','${tc}')\" title="${tc}" style="width:18px;height:18px;background:${a2css(tc)};border:1px solid rgba(255,255,255,.3);border-radius:2px;cursor:pointer;flex-shrink:0"></div>`).join('')}</div></div>
+    <div class="pr"><label>Track Color</label><input type="color" data-field="backColor" value="${a2hex(el.backColor)}" onchange="setArgbFromPicker(this)">
+    <input type="number" min="0" max="255" style="width:48px" data-field="backColor" value="${getAlpha(el.backColor)}" onchange="setAlphaFromInput(this)">
+    <button class="btn" style="font-size:10px;padding:2px 6px" onclick="saveThemeColor(elems.find(e=>e.id===selId)?.backColor)" title="Save to palette">+</button></div>
+    <div class="pr"><label></label><div style="display:flex;gap:3px;flex-wrap:wrap;flex:1">${themeColors.map(tc=>`<div onclick=\"applyThemeColor('backColor','${tc}')\" title="${tc}" style="width:18px;height:18px;background:${a2css(tc)};border:1px solid rgba(255,255,255,.3);border-radius:2px;cursor:pointer;flex-shrink:0"></div>`).join('')}</div></div>
     </div>
     <div class="ps"><div class="pt">Label Inside Ring</div>
     <div class="pr"><label>Show label</label><input type="checkbox" ${el.showLabel!==false?'checked':''} onchange="toggleRingLabel(this.checked)" title="Show sensor value centered inside the ring as a real text element"></div>
     <div class="pr"><label>Manual size</label><input type="checkbox" ${el.manualLabelSize?'checked':''} onchange="toggleManualLabelSize(this.checked)" title="Override the auto-calculated label size"></div>
     <div class="pr"><label>Label size</label><input type="number" id="rlsz" value="${el.labelSizeOverride>0?el.labelSizeOverride:Math.max(10,Math.round((el.perimeter/2-el.ringWidth/2)*0.5))}" min="1" ${el.manualLabelSize?'':'disabled style="opacity:0.4"'} onchange="setRingLabelSize(+this.value)" title="Manual label size in px"></div>
     <div class="pr"><label>Label color</label><input type="color" data-field="labelColor" value="${a2hex(el.labelColor||'#FFFFFFFF')}" onchange="setArgbFromPicker(this)">
-    <input type="number" min="0" max="255" style="width:48px" data-field="labelColor" value="${getAlpha(el.labelColor||'#FFFFFFFF')}" onchange="setAlphaFromInput(this)"></div>
+    <input type="number" min="0" max="255" style="width:48px" data-field="labelColor" value="${getAlpha(el.labelColor||'#FFFFFFFF')}" onchange="setAlphaFromInput(this)">
+    <button class="btn" style="font-size:10px;padding:2px 6px" onclick="saveThemeColor(elems.find(e=>e.id===selId)?.labelColor)" title="Save to palette">+</button></div>
+    <div class="pr"><label></label><div style="display:flex;gap:3px;flex-wrap:wrap;flex:1">${themeColors.map(tc=>`<div onclick=\"applyThemeColor('labelColor','${tc}')\" title="${tc}" style="width:18px;height:18px;background:${a2css(tc)};border:1px solid rgba(255,255,255,.3);border-radius:2px;cursor:pointer;flex-shrink:0"></div>`).join('')}</div></div>
     <div class="pr"><label>Label font</label>
       <select onchange="spRingFont(this.value)" style="flex:1;min-width:0">
         ${buildFontOptions(el.labelFont||'HarmonyOS Sans SC')}
@@ -615,7 +677,9 @@ function renderProps(el){
   if(el.type==='decor'){
     h+=`<div class="ps"><div class="pt">Decorative Block</div>
     <div class="pr"><label>Fill</label><input type="color" data-field="fillColor" value="${a2hex(el.fillColor)}" onchange="setArgbFromPicker(this)">
-    <input type="number" min="0" max="255" style="width:48px" data-field="fillColor" value="${getAlpha(el.fillColor)}" onchange="setAlphaFromInput(this)"></div>
+    <input type="number" min="0" max="255" style="width:48px" data-field="fillColor" value="${getAlpha(el.fillColor)}" onchange="setAlphaFromInput(this)">
+    <button class="btn" style="font-size:10px;padding:2px 6px" onclick="saveThemeColor(elems.find(e=>e.id===selId)?.fillColor)" title="Save to palette">+</button></div>
+    <div class="pr"><label></label><div style="display:flex;gap:3px;flex-wrap:wrap;flex:1">${themeColors.map(tc=>`<div onclick=\"applyThemeColor('fillColor','${tc}')\" title="${tc}" style="width:18px;height:18px;background:${a2css(tc)};border:1px solid rgba(255,255,255,.3);border-radius:2px;cursor:pointer;flex-shrink:0"></div>`).join('')}</div></div>
     <div class="pr"><label>Corner R</label><input type="text" value="${el.cornerRadius||'0 0 0 0'}" onchange="sp('cornerRadius',this.value,1)"></div>
     </div>`;
   }
@@ -626,6 +690,19 @@ function renderProps(el){
 function sp(k,v,refresh){
   const el=elems.find(e=>e.id===selId);if(!el)return;
   el[k]=v; if(refresh){renderEl(el);refreshLayers();} updStatus();
+}
+function setRingDiameter(val){
+  const el=elems.find(e=>e.id===selId);if(!el)return;
+  el.perimeter=val;
+  el.w=val; el.h=val;
+  const div=document.getElementById(el.id);
+  if(div){div.style.width=val+'px';div.style.height=val+'px';}
+  syncRingLabel(el);
+  renderEl(el);
+  // Update all size inputs
+  const pw=document.getElementById('pw'),ph=document.getElementById('ph'),pp=document.getElementById('pp');
+  if(pw)pw.value=val; if(ph)ph.value=val; if(pp)pp.value=val;
+  updStatus();
 }
 function spRingFont(v){
   const ring=elems.find(e=>e.id===selId);if(!ring)return;
@@ -739,8 +816,13 @@ function updStatus(){
 
 // ── EXPORT ZIP ────────────────────────────────────────────────────────────
 async function exportTheme(){
-  const name=document.getElementById('themeName').value.trim().replace(/\s+/g,'_');
+  // Prompt for name, pre-filling with whatever is in the field
+  const current=document.getElementById('themeName').value.trim();
+  const prompted=window.prompt('Theme name (no spaces):', current||'MyTheme');
+  if(prompted===null) return; // cancelled
+  const name=prompted.trim().replace(/\s+/g,'_');
   if(!name){toast('Enter a theme name first');return;}
+  document.getElementById('themeName').value=name;
   if(typeof JSZip==='undefined'){toast('JSZip not loaded — check internet connection');return;}
 
   const zip=new JSZip();
@@ -757,10 +839,13 @@ async function exportTheme(){
   // README
   root.file('README.txt', buildReadme(name));
 
-  // Back image → source/back.png
+  // Back image → source/back.png AND theme root (device looks in both)
   if(backData){
     const blob=await (await fetch(backData.data)).blob();
     src.file('back.png',blob);
+    // Device also expects back.png in the theme root folder
+    const blob2=await (await fetch(backData.data)).blob();
+    root.file('back.png',blob2);
   }
 
   // Image layers → source/
@@ -769,30 +854,46 @@ async function exportTheme(){
     src.file(el.filename||'d1.png',blob);
   }
 
-  // Attempt to export font files for fonts loaded via system font API
+  // Export font files: try explicit uploads first, then queryLocalFonts API
   const fontFolder=root.folder('font');
   const usedFonts=[...new Set(elems.filter(e=>e.fontFamily||e.labelFont).map(e=>[e.fontFamily,e.labelFont]).flat().filter(Boolean))];
-  let fontsCopied=0;
-  if(window.queryLocalFonts){
+  const exported=new Set();
+  // 1. Use explicitly uploaded font files (most reliable)
+  for(const fname of usedFonts){
+    if(fontFiles[fname]){
+      fontFolder.file(fontFiles[fname].name, fontFiles[fname].data);
+      exported.add(fname);
+    }
+  }
+  // 2. Try queryLocalFonts API for any remaining fonts (Chrome/Edge only)
+  const stillNeeded=usedFonts.filter(f=>!exported.has(f));
+  if(stillNeeded.length>0 && window.queryLocalFonts){
     try{
       const allSysFonts=await window.queryLocalFonts();
-      for(const fname of usedFonts){
+      for(const fname of stillNeeded){
         const match=allSysFonts.find(f=>f.family===fname||f.fullName===fname||f.postscriptName===fname);
         if(match){
           try{
             const blob=await match.blob();
             const safeName=fname.replace(/[^a-zA-Z0-9_\-一-鿿]/g,'_');
             fontFolder.file(safeName+'.ttf',blob);
-            fontsCopied++;
-          }catch(e2){/* font blob not available, skip */}
+            exported.add(fname);
+          }catch(e2){/* blob() not supported in this browser */}
         }
       }
-    }catch(e){/* permission not granted */}
+    }catch(e){/* permission denied or API unavailable */}
   }
-  if(fontsCopied===0 && usedFonts.length>0){
-    const noteLines=['Fonts used in this theme:'].concat(usedFonts).concat(['','Install these fonts on the display device and copy the .ttf files into this font/ folder.','Tip: Open the builder in Chrome/Edge and click "Load System Fonts" to enable auto font export.']);
-    fontFolder.file('FONTS_NOTE.txt', noteLines.join('\n'));
-  }
+  // Write note for any fonts not automatically exported
+  const missing=usedFonts.filter(f=>!exported.has(f));
+  const noteLines=['FONTS FOR THIS THEME:',''].concat(
+    usedFonts.map(f=>exported.has(f)?'[included] '+f:'[MISSING]  '+f)
+  ).concat(missing.length>0?['',
+    'For missing fonts, use the "Add Font File" button in the Theme Builder:',
+    '1. Select the element using the font',
+    '2. In the Font section click "Add Font File" and pick the .ttf file',
+    '3. Re-export — it will be included automatically'
+  ]:[]);
+  fontFolder.file('FONTS_NOTE.txt', noteLines.join('\n'));
 
   // Auto-capture demo.png and include in ZIP
   toast('Capturing demo.png…');
@@ -830,8 +931,33 @@ function buildSetting(name){
   const sorted=[...exportElems].sort((a,b)=>b.z-a.z);
   sorted.forEach(el=>{
     if(el.type==='text'||el.type==='static'){
-      const parts=[`x@${fmt(el.x)}`,`y@${fmt(el.y)}`,`z@${el.z}`,
-        `maxheight@${el.h||80}`,`maxwidth@${el.w||500}`,
+      // For ring-linked labels, use the parent ring's diameter as maxwidth/maxheight
+      // so the device centers the text properly within the ring bounding box
+      let mw=el.w||500, mh=el.h||80;
+      let ex=el.x, ey=el.y;
+      if(el.ringLabelFor){
+        const parentRing=visible.find(r=>r.id===el.ringLabelFor);
+        if(parentRing){
+          const diam=parentRing.perimeter||200;
+          mw=diam; mh=diam;
+          // Estimate rendered text size to calculate centered position
+          // Device left-aligns text at x/y within the maxwidth/maxheight box
+          const fs=el.fontSize||30;
+          const sampleVal=SEN[el.dataKey]?.s||'46';
+          const txt=(el.title||'')+(sampleVal)+(el.unit||'');
+          // Approximate char width varies by font: ~0.55 * fontSize for typical chars
+          // ℃ and digits are narrower; use conservative estimate
+          const estW=Math.round(txt.length * fs * 0.55);
+          const estH=Math.round(fs * 1.2);
+          ex=Math.round(parentRing.x + (diam - estW) / 2);
+          ey=Math.round(parentRing.y + (diam - estH) / 2);
+          // Clamp to ring bounds
+          ex=Math.max(parentRing.x, ex);
+          ey=Math.max(parentRing.y, ey);
+        }
+      }
+      const parts=[`x@${fmt(ex)}`,`y@${fmt(ey)}`,`z@${el.z}`,
+        `maxheight@${mh}`,`maxwidth@${mw}`,
         `FontSize@${el.fontSize||30}`,`FontFamily@#${el.fontFamily||'Arial'}`,
         `Foreground@${el.color||'#FFFFFFFF'}`];
       if(el.isDefaultText||el.type==='static') parts.push('IsDefaultText@true');
@@ -1017,6 +1143,35 @@ function syncFontSel(val){
   }
 }
 
+function loadFontFile(){
+  // Let user pick a .ttf/.otf file; register it keyed by filename base
+  // User then sets FontFamily to match. The file is stored for ZIP export.
+  pick('.ttf,.otf,font/ttf,font/otf',f=>{
+    const reader=new FileReader();
+    reader.onload=e=>{
+      // Store under the filename (without extension) as a best-guess family name
+      // User can associate it with whatever FontFamily name they set
+      const baseName=f.name.replace(/\.(?:ttf|otf)$/i,'');
+      fontFiles[baseName]=({name:f.name, data:e.target.result});
+      // Also try to register it with the browser for preview rendering
+      const blob=new Blob([e.target.result],{type:'font/truetype'});
+      const url=URL.createObjectURL(blob);
+      const face=new FontFace(baseName, `url(${url})`);
+      face.load().then(loaded=>{
+        document.fonts.add(loaded);
+        toast('Font loaded: '+baseName+' — set FontFamily to "'+baseName+'" or type the exact font name');
+      }).catch(()=>{
+        toast('Font file stored for export: '+f.name+' (preview may not update)');
+      });
+    };
+    reader.readAsArrayBuffer(f);
+  });
+}
+// Register a font file under a specific family name (called after user renames)
+function registerFontAs(filename, familyName){
+  const existing=Object.values(fontFiles).find(ff=>ff.name===filename);
+  if(existing) fontFiles[familyName]=existing;
+}
 async function loadSystemFonts(){
   if(!window.queryLocalFonts){
     toast('System font API not available — use Chrome or Edge, or type a font name manually');
@@ -1093,9 +1248,9 @@ function addAt(type,key,unit,cx,cy){
     Object.assign(el,{w:300,h:70,fontSize:30,fontFamily:'HarmonyOS Sans SC',color:'#FFFFFFFF',bold:false,scaleFont:true});
   } else if(type==='bar'){
     Object.assign(el,{w:300,h:40,fillColor:'#FF499CDE',borderColor:'#FFFFFFFF',bgColor:'#00000000',
-      borderThickness:2,cornerRadius:'0 0 0 0',maxNum:s.max||100,animated:false});
+      borderThickness:2,cornerRadius:'0 0 0 0',maxNum:100,animated:true});
   } else if(type==='ring'){
-    Object.assign(el,{w:200,h:200,ringWidth:12,perimeter:200,maxValue:s.max||100,
+    Object.assign(el,{w:200,h:200,ringWidth:12,perimeter:200,maxValue:100,
       indexColor:'#FF00B3EA',backColor:'#FF333344',
       showLabel:true,labelColor:'#FFFFFFFF',labelFont:'HarmonyOS Sans SC'});
   } else if(type==='decor'){
@@ -1119,16 +1274,17 @@ function spawnRingLabel(ringEl){
   const labelId='el_'+(nid++);
   const imgMaxZ=elems.filter(x=>x.type==='image').reduce((m,x)=>Math.max(m,x.z),0);
   const lz=Math.max(nz++, imgMaxZ+1, ringEl.z+1);
+  const diam=ringEl.perimeter||200;
   const labelEl={
     id:labelId, type:'text', dataKey:ringEl.dataKey,
     unit:s.u||ringEl.unit||'',
     x:ringEl.x, y:ringEl.y,
     z:lz, visible:true, title:'',
-    w:ringEl.w, h:ringEl.h,
+    w:diam, h:diam,  // always match perimeter so centering works
     fontSize, fontFamily:ringEl.labelFont||'HarmonyOS Sans SC',
     color:ringEl.labelColor||'#FFFFFFFF', bold:true,
     scaleFont:false,
-    ringLabelFor:ringEl.id  // link back to parent ring
+    ringLabelFor:ringEl.id
   };
   ringEl.labelElemId=labelId;
   elems.push(labelEl);
@@ -1140,8 +1296,9 @@ function syncRingLabel(ringEl){
   const lbl=elems.find(e=>e.id===ringEl.labelElemId);
   if(!lbl) return;
   // Keep label centered on ring, same size box
+  const _diam=ringEl.perimeter||200;
   lbl.x=ringEl.x; lbl.y=ringEl.y;
-  lbl.w=ringEl.w; lbl.h=ringEl.h;
+  lbl.w=_diam; lbl.h=_diam;
   // Sync font from ring settings
   if(ringEl.labelFont) lbl.fontFamily=ringEl.labelFont;
   if(ringEl.labelColor) lbl.color=ringEl.labelColor;
@@ -1236,6 +1393,91 @@ async function captureDemo(){
   } else {
     toast('Capture failed — check console');
   }
+}
+
+// ── SNAP & ALIGN ─────────────────────────────────────────────────────────
+const SNAP_DIST=10; // pixels within which to snap during drag
+
+function snapCenter(axis){
+  const el=elems.find(e=>e.id===selId);if(!el)return;
+  if(axis==='h') el.x=Math.round((CW-(el.w||0))/2);
+  if(axis==='v') el.y=Math.round((CH-(el.h||0))/2);
+  const div=document.getElementById(el.id);
+  if(div){div.style.left=el.x+'px';div.style.top=el.y+'px';}
+  if(el.type==='ring') syncRingLabel(el);
+  updPosInputs(el); updStatus();
+}
+
+function snapEdge(edge){
+  const el=elems.find(e=>e.id===selId);if(!el)return;
+  if(edge==='left')   el.x=0;
+  if(edge==='right')  el.x=CW-(el.w||0);
+  if(edge==='top')    el.y=0;
+  if(edge==='bottom') el.y=CH-(el.h||0);
+  const div=document.getElementById(el.id);
+  if(div){div.style.left=el.x+'px';div.style.top=el.y+'px';}
+  if(el.type==='ring') syncRingLabel(el);
+  updPosInputs(el); updStatus();
+}
+
+function alignToElem(edge){
+  const el=elems.find(e=>e.id===selId);if(!el)return;
+  const targetId=document.getElementById('alignTarget')?.value;
+  if(!targetId){toast('Pick an element to align to first');return;}
+  const tgt=elems.find(e=>e.id===targetId);if(!tgt)return;
+  if(edge==='left')    el.x=tgt.x;
+  if(edge==='right')   el.x=Math.round(tgt.x+(tgt.w||0)-(el.w||0));
+  if(edge==='top')     el.y=tgt.y;
+  if(edge==='bottom')  el.y=Math.round(tgt.y+(tgt.h||0)-(el.h||0));
+  if(edge==='centerH') el.y=Math.round(tgt.y+((tgt.h||0)-(el.h||0))/2);
+  if(edge==='centerV') el.x=Math.round(tgt.x+((tgt.w||0)-(el.w||0))/2);
+  const div=document.getElementById(el.id);
+  if(div){div.style.left=el.x+'px';div.style.top=el.y+'px';}
+  if(el.type==='ring') syncRingLabel(el);
+  updPosInputs(el); updStatus();
+}
+function checkSnap(el){
+  if(!snapEnabled) return;
+  const cx=el.x+(el.w||0)/2, cy=el.y+(el.h||0)/2;
+  const canvasCX=CW/2, canvasCY=CH/2;
+  const snapH=document.getElementById('snapH');
+  const snapV=document.getElementById('snapV');
+  // Snap to horizontal center line
+  if(Math.abs(cy-canvasCY)<SNAP_DIST/zoom){
+    el.y=Math.round(canvasCY-(el.h||0)/2);
+    if(snapH){snapH.style.top=canvasCY+'px';snapH.classList.add('show');}
+  } else if(snapH) snapH.classList.remove('show');
+  // Snap to vertical center line
+  if(Math.abs(cx-canvasCX)<SNAP_DIST/zoom){
+    el.x=Math.round(canvasCX-(el.w||0)/2);
+    if(snapV){snapV.style.left=canvasCX+'px';snapV.classList.add('show');}
+  } else if(snapV) snapV.classList.remove('show');
+}
+
+function hideSnapLines(){
+  document.getElementById('snapH')?.classList.remove('show');
+  document.getElementById('snapV')?.classList.remove('show');
+}
+
+// ── THEME COLORS ──────────────────────────────────────────────────────────
+function getElColor(){
+  const el=elems.find(e=>e.id===selId);
+  return el?el.color||'#FFFFFFFF':'#FFFFFFFF';
+}
+function saveThemeColor(argb){
+  if(!argb||themeColors.includes(argb)) return;
+  themeColors.unshift(argb);
+  if(themeColors.length>16) themeColors.pop();
+  // Refresh props to show new swatch
+  const el=elems.find(e=>e.id===selId);
+  if(el) renderProps(el);
+}
+function applyThemeColor(field,argb){
+  const el=elems.find(e=>e.id===selId);if(!el)return;
+  el[field]=argb;
+  renderEl(el);
+  if(el.type==='ring') syncRingLabel(el);
+  renderProps(el);
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────────
