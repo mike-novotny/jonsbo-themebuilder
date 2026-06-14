@@ -30,7 +30,9 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 .elist{overflow-y:auto;flex:1}
 .egrp{border-bottom:1px solid rgba(255,255,255,.04)}
 .egtitle{padding:6px 10px 3px;font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.08em}
-.ei{display:flex;align-items:center;gap:7px;padding:5px 10px;cursor:pointer;transition:background .1s;user-select:none}
+.ei{display:flex;align-items:center;gap:7px;padding:5px 10px;cursor:grab;transition:background .1s;user-select:none}
+.ei:active{cursor:grabbing}
+.ei-drag-ghost{position:fixed;pointer-events:none;background:var(--panel2);border:1px solid var(--accent);border-radius:4px;padding:4px 10px;font-size:12px;color:var(--accent);z-index:9999;opacity:.9}
 .ei:hover{background:var(--panel2)}.ei:active{background:#252530}
 .eico{width:20px;height:20px;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;flex-shrink:0}
 .ic-t{background:rgba(75,143,224,.2);color:var(--blue)}.ic-b{background:rgba(91,196,122,.2);color:var(--green)}
@@ -44,12 +46,12 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 #backImg{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;z-index:0;pointer-events:none}
 .ce{position:absolute;cursor:move;user-select:none}
 .ce.sel .ei2{outline:2px solid var(--accent)!important;outline-offset:0}
-.ei2{position:relative;width:100%;height:100%}
+.ei2{position:relative;width:100%;height:100%;overflow:visible}
 .rh{position:absolute;bottom:-5px;right:-5px;width:10px;height:10px;background:var(--accent);border-radius:2px;cursor:se-resize;z-index:20;display:none}
 .ce.sel .rh{display:block}
 .lz{position:absolute;top:1px;left:1px;font-size:9px;background:rgba(0,0,0,.75);color:var(--accent);padding:1px 3px;border-radius:2px;pointer-events:none;z-index:30;display:none}
 .ce.sel .lz{display:block}
-.tp{position:absolute;top:0;left:0;pointer-events:none;white-space:nowrap}
+.tp{display:inline-block;white-space:nowrap;pointer-events:none;line-height:1.1}
 .bprev{width:100%;height:100%;position:relative;overflow:hidden}
 .bfill{height:100%}
 .ring-wrap{width:100%;height:100%;display:flex;align-items:center;justify-content:center;pointer-events:none}
@@ -120,7 +122,7 @@ select option{background:#1f1f25}
 <div id="main">
   <!-- SIDEBAR -->
   <div id="sidebar">
-    <div class="sh">Add Elements — click to place</div>
+    <div class="sh">Add Elements — click or drag to canvas</div>
     <div class="elist">
 
       <div class="egrp">
@@ -196,7 +198,7 @@ select option{background:#1f1f25}
 
   <!-- CANVAS + LAYERS -->
   <div style="flex:1;display:flex;flex-direction:column;overflow:hidden">
-    <div id="cw" onclick="desel(event)">
+    <div id="cw" onclick="desel(event)" ondragover="cwDragOver(event)" ondrop="cwDrop(event)">
       <div id="co"><div id="canvas"><img id="backImg" src="" style="display:none"></div></div>
     </div>
     <div id="lp">
@@ -348,7 +350,12 @@ function add(type,key,unit){
   } else if(type==='decor'){
     Object.assign(el,{w:300,h:40,fillColor:'#FF4A4745',cornerRadius:'0 0 0 0'});
   }
-  elems.push(el); renderEl(el); refreshLayers(); sel(id); updStatus();
+  elems.push(el); renderEl(el);
+  // For ring elements with showLabel, spawn a linked text label element
+  if(type==='ring'&&el.showLabel!==false){
+    spawnRingLabel(el);
+  }
+  refreshLayers(); sel(id); updStatus();
 }
 
 // ── RENDER ELEMENT ────────────────────────────────────────────────────────
@@ -380,6 +387,21 @@ function renderEl(el){
     const pre=el.title&&el.type==='text'?el.title:'';
     const u=el.unit||'';
     inner.innerHTML=`<span class="tp" style="font-size:${el.fontSize||30}px;font-family:'${el.fontFamily||'Arial'}',sans-serif;color:${a2css(el.color)};font-weight:${el.bold?700:400}">${pre}${val}${u}</span>`;
+    // Auto-size the element div to hug the text span
+    requestAnimationFrame(()=>{
+      const span=inner.querySelector('.tp');
+      if(span){
+        const sw=Math.ceil(span.scrollWidth)+2;
+        const sh=Math.ceil(span.scrollHeight)+2;
+        if(sw>4&&sh>4){
+          el.w=sw; el.h=sh;
+          div.style.width=sw+'px'; div.style.height=sh+'px';
+          const pw=document.getElementById('pw'),ph=document.getElementById('ph');
+          if(pw&&selId===el.id) pw.value=sw;
+          if(ph&&selId===el.id) ph.value=sh;
+        }
+      }
+    });
   } else if(el.type==='bar'){
     const s=SEN[el.dataKey]||{s:50};
     const pct=Math.min(100,(parseFloat(s.s||50)/(el.maxNum||100))*100);
@@ -398,17 +420,12 @@ function renderEl(el){
     const cx=el.w/2, cy=el.h/2;
     const bgStroke=a2css(el.backColor||'#FF333344');
     const fgStroke=a2css(el.indexColor||'#FF00B3EA');
-    const labelSize=el.labelSizeOverride>0 ? el.labelSizeOverride : Math.max(10,Math.round(r*0.5));
-    const lblColor=a2css(el.labelColor||'#FFFFFFFF');
-    const lblFont=el.labelFont||'HarmonyOS Sans SC';
-    const unitLabel=(SEN[el.dataKey]||{}).u||el.unit||'';
-    // Build combined label e.g. "46°C" on one line, unit smaller via tspan
-    const unitSize=Math.round(labelSize*0.65);
     inner.innerHTML=`<div class="ring-wrap"><svg width="${el.w}" height="${el.h}" viewBox="0 0 ${el.w} ${el.h}">
       <circle cx="${cx}" cy="${cy}" r="${r.toFixed(2)}" fill="none" stroke="${bgStroke}" stroke-width="${rw}"/>
       <circle cx="${cx}" cy="${cy}" r="${r.toFixed(2)}" fill="none" stroke="${fgStroke}" stroke-width="${rw}" stroke-dasharray="${dash.toFixed(2)} ${gap.toFixed(2)}" stroke-linecap="butt" transform="rotate(-90 ${cx} ${cy})"/>
-      ${(()=>{if(el.showLabel===false)return '';const dy=-(Math.round(labelSize*0.15));return `<text text-anchor="middle" dominant-baseline="central" fill="${lblColor}" font-family="'${lblFont}',sans-serif" font-weight="700"><tspan x="${cx}" y="${cy}" font-size="${labelSize}px">${Math.round(val)}</tspan><tspan font-size="${unitSize}px" baseline-shift="super" dy="${dy}">${unitLabel}</tspan></text>`;})()}
     </svg></div>`;
+    // Sync any linked label element position to stay centered on ring
+    syncRingLabel(el);
   } else if(el.type==='image'){
     // pointer-events:none on the wrapper too so image never blocks element clicks
     div.style.pointerEvents='none';
@@ -430,7 +447,14 @@ function makeDrag(div,el){
     if(e.target.classList.contains('rh')) return;
     e.preventDefault();
     const ox=e.clientX,oy=e.clientY,ex=el.x,ey=el.y;
-    const mm=e2=>{el.x=Math.round(ex+(e2.clientX-ox)/zoom);el.y=Math.round(ey+(e2.clientY-oy)/zoom);div.style.left=el.x+'px';div.style.top=el.y+'px';if(selId===el.id)updPosInputs(el);};
+    const mm=e2=>{
+      el.x=Math.round(ex+(e2.clientX-ox)/zoom);
+      el.y=Math.round(ey+(e2.clientY-oy)/zoom);
+      div.style.left=el.x+'px';
+      div.style.top=el.y+'px';
+      if(el.type==='ring') syncRingLabel(el);
+      if(selId===el.id) updPosInputs(el);
+    };
     const mu=()=>{document.removeEventListener('mousemove',mm);document.removeEventListener('mouseup',mu);};
     document.addEventListener('mousemove',mm);document.addEventListener('mouseup',mu);
   });
@@ -562,7 +586,7 @@ function renderProps(el){
     <input type="number" min="0" max="255" style="width:48px" data-field="backColor" value="${getAlpha(el.backColor)}" onchange="setAlphaFromInput(this)"></div>
     </div>
     <div class="ps"><div class="pt">Label Inside Ring</div>
-    <div class="pr"><label>Show label</label><input type="checkbox" ${el.showLabel!==false?'checked':''} onchange="sp('showLabel',this.checked,1)" title="Show sensor value text centered inside the ring"></div>
+    <div class="pr"><label>Show label</label><input type="checkbox" ${el.showLabel!==false?'checked':''} onchange="toggleRingLabel(this.checked)" title="Show sensor value centered inside the ring as a real text element"></div>
     <div class="pr"><label>Manual size</label><input type="checkbox" ${el.manualLabelSize?'checked':''} onchange="toggleManualLabelSize(this.checked)" title="Override the auto-calculated label size"></div>
     <div class="pr"><label>Label size</label><input type="number" id="rlsz" value="${el.labelSizeOverride>0?el.labelSizeOverride:Math.max(10,Math.round((el.perimeter/2-el.ringWidth/2)*0.5))}" min="1" ${el.manualLabelSize?'':'disabled style="opacity:0.4"'} onchange="sp('labelSizeOverride',+this.value,1)" title="Manual label size in px"></div>
     <div class="pr"><label>Label color</label><input type="color" data-field="labelColor" value="${a2hex(el.labelColor||'#FFFFFFFF')}" onchange="setArgbFromPicker(this)">
@@ -593,6 +617,24 @@ function sp(k,v,refresh){
 function spRingFont(v){
   const el=elems.find(e=>e.id===selId);if(!el)return;
   el.labelFont=v; renderEl(el);
+}
+function toggleRingLabel(checked){
+  const el=elems.find(e=>e.id===selId);if(!el)return;
+  el.showLabel=checked;
+  if(checked){
+    if(!el.labelElemId || !elems.find(e=>e.id===el.labelElemId)){
+      spawnRingLabel(el);
+      refreshLayers();
+    }
+  } else {
+    // Remove linked label element
+    if(el.labelElemId){
+      const lbl=elems.find(e=>e.id===el.labelElemId);
+      if(lbl) delEl(lbl.id);
+      el.labelElemId=null;
+    }
+    refreshLayers();
+  }
 }
 function toggleManualLabelSize(checked){
   const el=elems.find(e=>e.id===selId);if(!el)return;
@@ -954,9 +996,133 @@ async function loadSystemFonts(){
   }
 }
 
+// ── DRAG FROM SIDEBAR ────────────────────────────────────────────────────
+let dragPayload = null; // {type, key, unit}
+
+function initSidebarDrag(){
+  document.querySelectorAll('.ei[onclick]').forEach(el=>{
+    // Parse type/key/unit from the onclick attribute
+    const m = el.getAttribute('onclick').match(/add\('(\w+)','([^']*)','([^']*)'\)/);
+    if(!m) return;
+    const [,type,key,unit]=m;
+    el.setAttribute('draggable','true');
+    el.addEventListener('dragstart',e=>{
+      dragPayload={type,key,unit};
+      e.dataTransfer.effectAllowed='copy';
+      e.dataTransfer.setData('text/plain', key||type);
+      // Custom ghost label
+      const ghost=document.createElement('div');
+      ghost.className='ei-drag-ghost';
+      ghost.textContent=(key||type);
+      document.body.appendChild(ghost);
+      e.dataTransfer.setDragImage(ghost,0,0);
+      setTimeout(()=>ghost.remove(),0);
+    });
+    el.addEventListener('dragend',()=>{ dragPayload=null; });
+  });
+}
+
+function cwDragOver(e){
+  e.preventDefault();
+  e.dataTransfer.dropEffect='copy';
+}
+
+function cwDrop(e){
+  e.preventDefault();
+  if(!dragPayload) return;
+  // Calculate canvas-space coordinates from drop position
+  const co=document.getElementById('co');
+  const rect=co.getBoundingClientRect();
+  const dropX=Math.round((e.clientX-rect.left)/zoom);
+  const dropY=Math.round((e.clientY-rect.top)/zoom);
+  const {type,key,unit}=dragPayload;
+  dragPayload=null;
+  // Add at drop position
+  addAt(type,key,unit,dropX,dropY);
+}
+
+// addAt places element at specific canvas coords instead of default 10%/10%
+function addAt(type,key,unit,cx,cy){
+  const s=SEN[key]||{};
+  const id='el_'+(nid++);
+  const imgMaxZ=elems.filter(x=>x.type==='image').reduce((m,x)=>Math.max(m,x.z),0);
+  const z=Math.max(nz++, imgMaxZ+1);
+  const el={id,type,dataKey:key,unit:unit||s.u||'',
+    x:cx,y:cy,z,visible:true,title:'',isDefaultText:type==='static'};
+  if(type==='text'||type==='static'){
+    Object.assign(el,{w:300,h:70,fontSize:30,fontFamily:'HarmonyOS Sans SC',color:'#FFFFFFFF',bold:false,scaleFont:true});
+  } else if(type==='bar'){
+    Object.assign(el,{w:300,h:40,fillColor:'#FF499CDE',borderColor:'#FFFFFFFF',bgColor:'#00000000',
+      borderThickness:2,cornerRadius:'0 0 0 0',maxNum:s.max||100,animated:false});
+  } else if(type==='ring'){
+    Object.assign(el,{w:200,h:200,ringWidth:12,perimeter:200,maxValue:s.max||100,
+      indexColor:'#FF00B3EA',backColor:'#FF333344',
+      showLabel:true,labelColor:'#FFFFFFFF',labelFont:'HarmonyOS Sans SC'});
+  } else if(type==='decor'){
+    Object.assign(el,{w:300,h:40,fillColor:'#FF4A4745',cornerRadius:'0 0 0 0'});
+  }
+  // Center element on drop point
+  el.x=Math.max(0,Math.round(cx-(el.w||150)/2));
+  el.y=Math.max(0,Math.round(cy-(el.h||40)/2));
+  elems.push(el); renderEl(el);
+  if(type==='ring'&&el.showLabel!==false) spawnRingLabel(el);
+  refreshLayers(); sel(id); updStatus();
+}
+
+// ── RING LABEL HELPERS ────────────────────────────────────────────────────
+function spawnRingLabel(ringEl){
+  // Create a real text element linked to the ring, centered inside it
+  const s=SEN[ringEl.dataKey]||{};
+  const rw=ringEl.ringWidth||12;
+  const r=Math.max(5,(ringEl.perimeter||200)/2-rw/2);
+  const fontSize=Math.max(10,Math.round(r*0.5));
+  const labelId='el_'+(nid++);
+  const imgMaxZ=elems.filter(x=>x.type==='image').reduce((m,x)=>Math.max(m,x.z),0);
+  const lz=Math.max(nz++, imgMaxZ+1, ringEl.z+1);
+  const labelEl={
+    id:labelId, type:'text', dataKey:ringEl.dataKey,
+    unit:s.u||ringEl.unit||'',
+    x:ringEl.x, y:ringEl.y,
+    z:lz, visible:true, title:'',
+    w:ringEl.w, h:ringEl.h,
+    fontSize, fontFamily:ringEl.labelFont||'HarmonyOS Sans SC',
+    color:ringEl.labelColor||'#FFFFFFFF', bold:true,
+    scaleFont:false,
+    ringLabelFor:ringEl.id  // link back to parent ring
+  };
+  ringEl.labelElemId=labelId;
+  elems.push(labelEl);
+  renderEl(labelEl);
+}
+
+function syncRingLabel(ringEl){
+  if(!ringEl.labelElemId) return;
+  const lbl=elems.find(e=>e.id===ringEl.labelElemId);
+  if(!lbl) return;
+  // Keep label centered on ring, same size box
+  lbl.x=ringEl.x; lbl.y=ringEl.y;
+  lbl.w=ringEl.w; lbl.h=ringEl.h;
+  // Scale font with ring if no manual override
+  if(!lbl.manualLabelSize){
+    const rw=ringEl.ringWidth||12;
+    const r=Math.max(5,(ringEl.perimeter||200)/2-rw/2);
+    lbl.fontSize=Math.max(10,Math.round(r*0.5));
+  }
+  const ldiv=document.getElementById(lbl.id);
+  if(ldiv){
+    ldiv.style.left=lbl.x+'px'; ldiv.style.top=lbl.y+'px';
+    ldiv.style.width=lbl.w+'px'; ldiv.style.height=lbl.h+'px';
+  }
+  renderEl(lbl);
+}
+
+// Also sync ring label when ring is dragged
+const _origMakeDrag=makeDrag;
+
 // ── INIT ──────────────────────────────────────────────────────────────────
 setOri('vertical');
 setTimeout(()=>chZoom(0),100);
+setTimeout(()=>initSidebarDrag(),50);
 refreshLayers();updStatus();
 </script>
 </body>
