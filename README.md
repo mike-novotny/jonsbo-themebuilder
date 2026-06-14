@@ -10,7 +10,7 @@ A browser-based visual editor for creating custom themes for the **Jonsbo 916** 
 
 - **Visual canvas editor** — 462×1920 (vertical) or 1920×462 (horizontal) canvas scaled to fit your screen
 - **Drag to place, drag to move, drag corner to resize** every element
-- **Live preview** — sensor values shown with realistic sample data so you can see how it'll look
+- **Live preview** — sensor values shown with realistic sample data so you can see how it will look
 - **All element types supported:**
   - Text (live sensor data with optional prefix and unit)
   - Progress bars (horizontal or vertical, fully styled)
@@ -19,22 +19,66 @@ A browser-based visual editor for creating custom themes for the **Jonsbo 916** 
   - Decorative blocks (solid color panels, dividers)
   - Image layers (d1.png, d2.png, etc.)
 - **Full sensor library** — every data binding found across all built-in themes
+- **Font picker** — built-in theme fonts dropdown, system font loader (Chrome/Edge), and custom font entry
 - **ZIP export** — downloads a `.zip` with the exact folder structure the display expects, including your image assets
 - **Layer panel** — see z-order, toggle visibility, delete elements
 - **Keyboard shortcuts** — arrow keys nudge (Shift+arrow = 10px), Delete removes selected element
 
 ---
 
-## Getting Started
+## Installing a Theme on the Device
+
+1. Export your theme as a ZIP from the Theme Builder
+2. Extract the ZIP — you will get a folder named after your theme
+3. Copy the entire theme folder into the Jonsbo programme directory:
+
+```
+C:\Users\<YourUsername>\AppData\Local\JONSBO-AIO\Programme\
+```
+
+> **Finding AppData:** AppData is a hidden folder. The quickest way to reach it is to press `Win + R`, type `%LocalAppData%\JONSBO-AIO\Programme` and press Enter. This opens the folder directly.
+
+4. The final structure should look like this:
+
+```
+C:\Users\<YourUsername>\AppData\Local\JONSBO-AIO\Programme\
+└── YourThemeName\
+    ├── Setting.txt
+    ├── YourThemeName.json
+    ├── demo.png
+    ├── font\
+    │   └── (your .ttf font files)
+    └── source\
+        ├── back.png
+        ├── d1.png
+        └── d2.png
+```
+
+5. Restart the Jonsbo AIO software or refresh the theme list — your theme should now appear in the theme browser.
+
+> **demo.png** — This is the thumbnail shown in the theme browser. Take a screenshot of the canvas preview in the Theme Builder, crop it to the theme dimensions, and save it as `demo.png` inside the theme folder.
+
+### Font Installation
+
+If your theme uses custom fonts, the font files must be installed in **two places**:
+
+- Inside the theme's `font\` folder (so the theme package is self-contained)
+- Installed on the Windows system running the Jonsbo software (right-click the `.ttf` file → **Install**)
+
+The `FontFamily` name in `Setting.txt` must match the font's internal name as Windows recognises it, which is not always the same as the filename.
+
+---
+
+## Getting Started with the Builder
 
 1. Download `ThemeBuilder.html`
-2. Open it in any modern browser (Chrome, Edge, Firefox) — no install required
+2. Open it in any modern browser — Chrome or Edge recommended for full font support
 3. Choose **Vertical** or **Horizontal** orientation
 4. Enter a theme name (no spaces)
 5. Click **🖼 Background** to load your `back.png`
 6. Click elements in the left sidebar to add them to the canvas
 7. Click an element to select it, drag to move, drag the gold corner handle to resize
-8. Edit properties in the right panel
+8. Edit properties in the right panel — including font family via the font picker
 9. Click **💾 Export ZIP** when done
 
 ---
@@ -56,9 +100,38 @@ ThemeName/
     └── d2.png
 ```
 
-Extract the ZIP and drop the folder into the Jonsbo theme directory on your display device.
+---
 
-> **demo.png** — The app can't auto-capture a screenshot, so take one of the canvas area yourself and save it as `demo.png` inside the theme folder. This is what the device shows in its theme browser.
+## Fonts
+
+### Using the Font Picker
+
+The font property panel has three ways to choose a font:
+
+- **Dropdown** — all fonts found in the built-in Jonsbo themes, pre-loaded and ready to use
+- **Load System Fonts** button — queries fonts installed on your Windows machine (Chrome/Edge only, requires a one-time permission prompt)
+- **Custom entry** — type any font name directly into the text field for fonts not in either list
+
+### Font Files in Your Theme
+
+Font files must be placed in the `font\` subfolder of your theme folder. The font name used in `FontFamily@#` in `Setting.txt` must match the font's **internal name** as registered with the operating system, not necessarily the filename.
+
+### Built-in Theme Fonts
+
+Fonts found across the official Jonsbo 916 built-in themes:
+
+| Font name | Style |
+|-----------|-------|
+| `HarmonyOS Sans SC` | Huawei system sans-serif — also available as `HarmonyOS Sans SC Light`, `HarmonyOS Sans SC Medium`, `HarmonyOS Sans SC Black` |
+| `Square721 BT` | Monospace / tech display |
+| `Tomorrow ExtraBold` | Geometric sans-serif, very bold |
+| `Oswald Stencil` | Condensed stencil |
+| `Cinzel` | Classical serif |
+| `站酷高端黑` | Chinese display, bold gothic |
+| `站酷庆科黄油体` | Chinese display, rounded butter style |
+| `猫啃忘形圆` | Chinese display, rounded |
+
+Any `.ttf` or `.otf` font installed on the display device can be referenced by name.
 
 ---
 
@@ -108,7 +181,7 @@ BorderLine:x@40,y@500,z@8,maxheight@40,maxwidth@360,MaxNum@100,CornerRadius@0 0 
 | `IsAnimationEnabled` | `True` or `False` |
 | `data` | Sensor binding key |
 
-A `BorderLine` **without** a `data@` field is a decorative block (no animation, just a solid colored rectangle).
+A `BorderLine` **without** a `data@` field is a decorative block — no animation, just a solid colored rectangle.
 
 ### Ring gauge (RingProgressBar)
 ```
@@ -118,9 +191,9 @@ RingProgressBar:x@150,y@50,z@12,RingWidth@12,Perimeter@127,MaxValue@200,IndexCol
 | Field | Description |
 |-------|-------------|
 | `RingWidth` | Stroke thickness of the arc |
-| `Perimeter` | Circumference of the ring in pixels (controls size: `Perimeter / (2π) = radius`) |
+| `Perimeter` | Circumference of the ring in pixels (`Perimeter ÷ 2π = radius`) |
 | `MaxValue` | Value that represents a full ring |
-| `IndexColor` | Arc color (`#AARRGGBB`) |
+| `IndexColor` | Arc fill color (`#AARRGGBB`) |
 | `BackColor` | Track/background ring color |
 | `data` | Sensor binding key |
 
@@ -129,7 +202,7 @@ RingProgressBar:x@150,y@50,z@12,RingWidth@12,Perimeter@127,MaxValue@200,IndexCol
 d1.png:x@0,y@0,z@1,height@1920,width@462
 ```
 
-The filename is the element type. Files go in the `source/` folder. Multiple layers use `d1.png`, `d2.png`, `d3.png`, etc. A `back.png` is also supported as a separate background outside the layer stack.
+The filename is the element type. Files go in the `source\` folder. Multiple layers use `d1.png`, `d2.png`, `d3.png`, etc. A `back.png` is also supported as a separate background outside the layer stack.
 
 ### Color format
 
@@ -202,27 +275,6 @@ All `data@` values discovered across the built-in 916 themes:
 
 ---
 
-## Fonts
-
-Font files must be placed in the `font/` subfolder of your theme. The font name used in `FontFamily@#` must match the font's internal name (not necessarily the filename).
-
-Fonts seen in the built-in themes:
-
-| Font name | Style |
-|-----------|-------|
-| `站酷高端黑` | Chinese display, bold gothic |
-| `站酷庆科黄油体` | Chinese display, rounded |
-| `猫啃忘形圆` | Chinese display, rounded |
-| `HarmonyOS Sans SC` | Huawei system sans-serif (multiple weights: Light, Medium, Black) |
-| `Square721 BT` | Monospace / tech |
-| `Tomorrow ExtraBold` | Geometric sans, very bold |
-| `Oswald Stencil` | Condensed stencil |
-| `Cinzel` | Classical serif |
-
-Any `.ttf` or `.otf` font installed on the display device can be referenced by name.
-
----
-
 ## Tips
 
 **Layering artwork** — The display system composites layers in z-order. A typical stack looks like:
@@ -244,6 +296,12 @@ Design your `d1.png` background and `d2.png` overlay in an image editor (Photosh
 ---
 
 ## Version History
+
+### v3
+- Font picker with built-in theme fonts dropdown, system font loader (Chrome/Edge), and custom font entry
+- Fixed color picker not saving or updating preview
+- Fixed ring gauge background track not rendering
+- Fixed element position drift on repeated re-renders
 
 ### v2
 - RingProgressBar element with live SVG arc preview

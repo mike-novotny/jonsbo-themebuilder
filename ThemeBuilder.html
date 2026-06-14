@@ -464,7 +464,17 @@ function renderProps(el){
     }
     h+=`<div class="ps"><div class="pt">Font</div>
     <div class="pr"><label>Size px</label><input type="number" value="${el.fontSize||30}" onchange="sp('fontSize',+this.value,1)"></div>
-    <div class="pr"><label>Family</label><input type="text" value="${el.fontFamily||'Arial'}" onchange="sp('fontFamily',this.value,1)"></div>
+    <div class="pr"><label>Family</label>
+      <select id="fontSel" onchange="pickFont(this.value)" style="flex:1;min-width:0">
+        ${buildFontOptions(el.fontFamily||'Arial')}
+      </select>
+    </div>
+    <div class="pr"><label></label>
+      <input type="text" id="fontCustom" value="${el.fontFamily||'Arial'}" placeholder="Type or paste font name" style="flex:1" onchange="sp('fontFamily',this.value,1);syncFontSel(this.value)">
+    </div>
+    <div class="pr"><label></label>
+      <button class="btn" style="flex:1;font-size:11px" onclick="loadSystemFonts()">🔍 Load System Fonts</button>
+    </div>
     <div class="pr"><label>Color</label><input type="color" data-field="color" value="${a2hex(el.color)}" onchange="setArgbFromPicker(this)">
     <input type="number" min="0" max="255" style="width:48px" data-field="color" value="${getAlpha(el.color)}" placeholder="A" onchange="setAlphaFromInput(this)"></div>
     <div class="pr"><label>Bold</label><input type="checkbox" ${el.bold?'checked':''} onchange="sp('bold',this.checked,1)"></div>
@@ -748,6 +758,88 @@ document.addEventListener('keydown',e=>{
     updPosInputs(el);updStatus();e.preventDefault();
   }
 });
+
+// ── FONTS ─────────────────────────────────────────────────────────────────
+const THEME_FONTS = [
+  'Arial',
+  'HarmonyOS Sans SC',
+  'HarmonyOS Sans SC Light',
+  'HarmonyOS Sans SC Medium',
+  'HarmonyOS Sans SC Black',
+  'Square721 BT',
+  'Tomorrow ExtraBold',
+  'Oswald Stencil',
+  'Cinzel',
+  '站酷高端黑',
+  '站酷庆科黄油体',
+  '猫啃忘形圆',
+];
+let systemFonts = []; // populated by loadSystemFonts()
+
+function allFonts(){
+  // merge theme fonts + system fonts, deduplicate, sort
+  const merged = [...new Set([...THEME_FONTS, ...systemFonts])];
+  merged.sort((a,b)=>{
+    // keep theme fonts at top, then alphabetical
+    const ai=THEME_FONTS.indexOf(a), bi=THEME_FONTS.indexOf(b);
+    if(ai>=0&&bi<0) return -1;
+    if(bi>=0&&ai<0) return 1;
+    if(ai>=0&&bi>=0) return ai-bi;
+    return a.localeCompare(b);
+  });
+  return merged;
+}
+
+function buildFontOptions(current){
+  const fonts = allFonts();
+  const hasCustom = !fonts.includes(current);
+  let opts = '';
+  if(hasCustom) opts += `<option value="${current}" selected>✏ ${current}</option><option disabled>──────────────</option>`;
+  opts += fonts.map(f=>`<option value="${f}"${f===current&&!hasCustom?' selected':''}>${f}</option>`).join('');
+  return opts;
+}
+
+function pickFont(val){
+  if(!val) return;
+  const el=elems.find(e=>e.id===selId); if(!el) return;
+  el.fontFamily=val;
+  // sync text input
+  const ci=document.getElementById('fontCustom');
+  if(ci) ci.value=val;
+  renderEl(el);
+}
+
+function syncFontSel(val){
+  // after typing in custom field, rebuild select if needed
+  const sel=document.getElementById('fontSel'); if(!sel) return;
+  if(!allFonts().includes(val)){
+    // add as custom option at top
+    const opt=document.createElement('option');
+    opt.value=val; opt.textContent='✏ '+val; opt.selected=true;
+    sel.insertBefore(opt, sel.firstChild);
+  } else {
+    sel.value=val;
+  }
+}
+
+async function loadSystemFonts(){
+  if(!window.queryLocalFonts){
+    toast('System font API not available — use Chrome or Edge, or type a font name manually');
+    return;
+  }
+  try {
+    toast('Requesting font access…');
+    const fonts = await window.queryLocalFonts();
+    const names = [...new Set(fonts.map(f=>f.family))].sort();
+    systemFonts = names;
+    toast(`Loaded ${names.length} system fonts — dropdown updated`);
+    // refresh props panel to rebuild select
+    const el=elems.find(e=>e.id===selId);
+    if(el) renderProps(el);
+  } catch(e){
+    toast('Font access denied or unavailable: '+e.message);
+  }
+}
 
 // ── INIT ──────────────────────────────────────────────────────────────────
 setOri('vertical');
