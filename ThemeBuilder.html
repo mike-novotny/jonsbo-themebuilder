@@ -49,7 +49,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 .snap-line.show{opacity:1}
 #backImg{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;z-index:0;pointer-events:none}
 #backVid{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;z-index:0;pointer-events:none;display:none}
-.ce{position:absolute;cursor:move;user-select:none}
+.ce{position:absolute;cursor:move;user-select:none;z-index:auto}
 .ce.sel .ei2{outline:2px solid var(--accent)!important;outline-offset:0}
 .ei2{position:relative;width:100%;height:100%;overflow:visible}
 .rh{position:absolute;bottom:-5px;right:-5px;width:10px;height:10px;background:var(--accent);border-radius:2px;cursor:se-resize;z-index:20;display:none}
@@ -315,10 +315,14 @@ function applyZoom(){
 // ── BACKGROUND ────────────────────────────────────────────────────────────
 function loadBack(){
   pick('image/*,video/mp4,video/x-msvideo,video/x-ms-wmv,.mp4,.avi,.wmv,.gif,.png,.jpg,.jpeg',f=>{
+    const isVideo=isVideoFile(f.name);
+    // Store the raw File object so export doesn't need to fetch() the data URL
+    // (fetch() on blob/data URLs from file:// context triggers security errors in Chrome)
+    backData={file:f, name:f.name, isVideo};
+    // For preview, use object URL (video) or data URL (image)
     const r=new FileReader();
     r.onload=e=>{
-      const isVideo=isVideoFile(f.name);
-      backData={data:e.target.result,name:f.name,isVideo};
+      backData.data=e.target.result; // keep data URL for preview
       showBackground(e.target.result,f.name,isVideo);
       toast('Background: '+f.name+(isVideo?' (video)':''));
     };
@@ -361,7 +365,7 @@ function loadImgLayer(){
       // Ensure all non-image elements are above this z
       const nonImgElems=elems.filter(x=>x.type!=='image');
       nonImgElems.forEach(x=>{if(x.z<=imgZ) x.z=imgZ+1+(niz++);});
-      const el={id:'el_'+(nid++),type:'image',data:e.target.result,filename:f.name,
+      const el={id:'el_'+(nid++),type:'image',data:e.target.result,file:f,filename:f.name,
         x:0,y:0,w:CW,h:CH,z:imgZ,visible:true};
       elems.push(el); elems.forEach(x=>renderEl(x)); refreshLayers(); sel(el.id);
       toast('Image layer: '+f.name+' (z='+el.z+')');
@@ -426,8 +430,12 @@ function renderEl(el){
   div.style.display=el.visible?'':'none';
   // Reset pointer-events; image type sets its own none below
   if(el.type!=='image') div.style.pointerEvents='';
+  // Ensure image layer divs are never accidentally hidden
+  if(el.type==='image') div.style.opacity='1';
   div.querySelector('.lz').textContent='z:'+el.z;
   const inner=div.querySelector('.ei2');
+  // Reset inner styles for image type (prevent stale styles from other types)
+  if(el.type==='image') inner.style.cssText='width:100%;height:100%;overflow:hidden';
 
   if(el.type==='text'||el.type==='static'){
     const s=SEN[el.dataKey]||{};
@@ -490,7 +498,17 @@ function renderEl(el){
   } else if(el.type==='image'){
     // pointer-events:none on the wrapper too so image never blocks element clicks
     div.style.pointerEvents='none';
-    inner.innerHTML=el.data?`<img src="${el.data}" style="width:100%;height:100%;object-fit:cover;display:block;pointer-events:none">`:'<div class="iph" style="pointer-events:none">📷<span>'+( el.filename||'image')+'</span></div>';
+    if(el.data){
+      const ext=(el.filename||'').split('.').pop().toLowerCase();
+      const isVid=/mp4|avi|wmv|mov/.test(ext);
+      if(isVid){
+        inner.innerHTML=`<video src="${el.data}" autoplay loop muted playsinline style="width:100%;height:100%;object-fit:cover;display:block;pointer-events:none"></video>`;
+      } else {
+        inner.innerHTML=`<img src="${el.data}" style="width:100%;height:100%;object-fit:cover;display:block;pointer-events:none">`;
+      }
+    } else {
+      inner.innerHTML='<div class="iph" style="pointer-events:none">📷<span style="font-size:9px">'+( el.filename||'image')+'<br><span style="color:var(--red);font-size:8px">not loaded</span></span></div>';
+    }
   } else if(el.type==='decor'){
     inner.innerHTML=`<div class="dec-ph" style="background:${a2css(el.fillColor)};border-radius:${el.cornerRadius||0}">decor</div>`;
   }
@@ -875,20 +893,27 @@ async function exportTheme(){
   root.file('README.txt', buildReadme(name));
 
   // Back file → source/ AND theme root (device looks in both)
-  // Preserve original extension (back.png, back.mp4, back.gif, back.avi, back.wmv)
   if(backData){
     const ext=backData.name.includes('.')?backData.name.split('.').pop().toLowerCase():'png';
     const backFilename='back.'+ext;
-    const blob=await (await fetch(backData.data)).blob();
-    src.file(backFilename, blob);
-    const blob2=await (await fetch(backData.data)).blob();
-    root.file(backFilename, blob2);
+    // Use raw File/Blob stored at load time — never fetch() to avoid file:// warnings
+    const backBlob = backData.file instanceof File ? backData.file
+      : backData.blob instanceof Blob ? backData.blob
+      : null;
+    if(backBlob){
+      src.file(backFilename, backBlob);
+      root.file(backFilename, backBlob);
+    }
   }
 
   // Image layers → source/
-  for(const el of elems.filter(e=>e.type==='image'&&e.data)){
-    const blob=await (await fetch(el.data)).blob();
-    src.file(el.filename||'d1.png',blob);
+  for(const el of elems.filter(e=>e.type==='image')){
+    // Priority: raw File object > stored blob > fetch from objectURL
+    // Use raw File/Blob stored at load time — never fetch() to avoid file:// warnings
+    const layerBlob = el.file instanceof File ? el.file
+      : el.blob instanceof Blob ? el.blob
+      : null;
+    if(layerBlob) src.file(el.filename||'d1.png', layerBlob);
   }
 
   // Export font files: try explicit uploads first, then queryLocalFonts API
@@ -1540,26 +1565,27 @@ function importFolder(){
     // Files in Programme/ThemeA/Setting.txt → theme "ThemeA"
     // Files in ThemeA/Setting.txt → theme "ThemeA" (single theme folder)
     const themes={}; // themeName → {files:[File], path prefix}
+    // First pass: find all Setting.txt files to identify theme roots
+    // A Setting.txt at depth 2 (ThemeFolder/Setting.txt) = single theme selected
+    // A Setting.txt at depth 3 (Programme/ThemeX/Setting.txt) = programme folder selected
+    const settingFiles=files.filter(f=>f.name.toLowerCase()==='setting.txt');
+    let programmeMode=false;
+    if(settingFiles.length>0){
+      const firstParts=settingFiles[0].webkitRelativePath.split('/');
+      // depth 3 = Programme/ThemeName/Setting.txt → programme mode
+      programmeMode = firstParts.length===3;
+    }
     for(const f of files){
-      // webkitRelativePath = "FolderName/subpath" or "FolderName/SubFolder/subpath"
       const parts=f.webkitRelativePath.split('/');
-      // parts[0] = the folder the user selected
-      // If there's a Setting.txt at parts[0]/Setting.txt → single theme
-      // If Setting.txt is at parts[0]/ThemeX/Setting.txt → programme folder
-      if(parts.length===2 && parts[1].toLowerCase()==='setting.txt'){
-        // Single theme folder selected directly
-        const tname=parts[0];
-        if(!themes[tname]) themes[tname]={files:[],settingFile:null};
+      // In programme mode: parts[1] = theme name, parts[0] = Programme folder
+      // In single theme mode: parts[0] = theme folder name
+      const tname = programmeMode ? parts[1] : parts[0];
+      if(!tname) continue;
+      if(!themes[tname]) themes[tname]={files:[],settingFile:null};
+      // All files under this theme go in — regardless of depth (handles source/ subdir)
+      themes[tname].files.push(f);
+      if(f.name.toLowerCase()==='setting.txt'){
         themes[tname].settingFile=f;
-        themes[tname].files.push(f);
-      } else if(parts.length>=2){
-        // Could be programme folder: parts[0]=Programme, parts[1]=ThemeName
-        const tname=parts.length>=3?parts[1]:parts[0];
-        if(!themes[tname]) themes[tname]={files:[],settingFile:null};
-        themes[tname].files.push(f);
-        if(parts[parts.length-1].toLowerCase()==='setting.txt'){
-          themes[tname].settingFile=f;
-        }
       }
     }
     // Only keep themes that have a Setting.txt
@@ -1634,14 +1660,11 @@ async function importFromFileList(themeName, files, settingFile){
     const imageMap={};
     const imgFiles=files.filter(f=>/\.(png|jpg|jpeg|gif|mp4|avi|wmv|mov)$/i.test(f.name));
     await Promise.all(imgFiles.map(f=>new Promise(res=>{
-      const r=new FileReader();
-      r.onload=e=>{
-        // Store under the plain filename (e.g. "back.png", "d1.png")
-        imageMap[f.name]=e.target.result;
-        imageMap[f.name.toLowerCase()]=e.target.result;
-      };
-      r.onloadend=res;
-      r.readAsDataURL(f);
+      const url=URL.createObjectURL(f);
+      imageMap[f.name]=url;
+      imageMap[f.name.toLowerCase()]=url;
+      imageMap[f.name.toLowerCase()+'__blob']=f;
+      res();
     })));
     parseSetting(settingTxt, imageMap);
     toast('Loaded: '+themeName);
@@ -1680,25 +1703,30 @@ async function importFromZip(file){
     const imageMap={}; // filename → dataURL
     const themeRoot=settingPath.includes('/')?settingPath.substring(0,settingPath.lastIndexOf('/')+1):'';
     const imgPromises=[];
-    zip.forEach((path,entry)=>{
-      if(entry.dir) return;
-      const fname=path.split('/').pop().toLowerCase();
-      if(/^(back|d\d+)\.(png|jpg|jpeg|gif|mp4|avi|wmv|mov)$/i.test(fname)||
-         (path.includes('source/') && /\.(png|jpg|jpeg|gif|mp4|avi|wmv|mov)$/i.test(fname))){
-        imgPromises.push(
-          entry.async('base64').then(b64=>{
-            const ext=fname.split('.').pop().toLowerCase();
-            const mimeMap={png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',
-              gif:'image/gif',mp4:'video/mp4',avi:'video/x-msvideo',
-              wmv:'video/x-ms-wmv',mov:'video/quicktime'};
-            const mime=mimeMap[ext]||'application/octet-stream';
-            imageMap[fname]='data:'+mime+';base64,'+b64;
-            const origName=path.split('/').pop();
-            imageMap[origName]='data:'+mime+';base64,'+b64;
-          })
-        );
-      }
-    });
+    // Collect all image/video files from the ZIP
+    const allFiles=[];
+    zip.forEach((path,entry)=>{ if(!entry.dir) allFiles.push({path,entry}); });
+    const mimeMap={png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',
+      gif:'image/gif',mp4:'video/mp4',avi:'video/x-msvideo',
+      wmv:'video/x-ms-wmv',mov:'video/quicktime'};
+    for(const {path,entry} of allFiles){
+      const origName=path.split('/').pop();
+      const fname=origName.toLowerCase();
+      const ext=fname.split('.').pop().toLowerCase();
+      if(!/\.(png|jpg|jpeg|gif|mp4|avi|wmv|mov)$/i.test(fname)) continue;
+      if(fname==='demo.png') continue; // skip thumbnail
+      const mime=mimeMap[ext]||'image/png';
+      imgPromises.push(
+        entry.async('arraybuffer').then(buf=>{
+          const blob=new Blob([buf],{type:mime});
+          const url=URL.createObjectURL(blob);
+          imageMap[fname]=url;
+          imageMap[origName]=url;
+          imageMap[origName.toLowerCase()]=url;
+          imageMap[fname+'__blob']=blob;
+        })
+      );
+    }
     await Promise.all(imgPromises);
     parseSetting(settingTxt, imageMap);
     toast('Theme imported from ZIP!');
@@ -1837,10 +1865,16 @@ function parseSetting(text, imageMap){
       if(/\.(png|jpg|jpeg|gif|mp4|avi|wmv|mov)$/i.test(fname)){
         const w=parseInt(p.width||p.Width||CW);
         const h=parseInt(p.height||p.Height||CH);
-        const imgData=imageMap[fname]||imageMap[fname.toLowerCase()]||null;
+        // Try multiple key variants in case of case/path differences
+        const imgData=imageMap[fname]
+          ||imageMap[fname.toLowerCase()]
+          ||imageMap[fname.toUpperCase()]
+          ||null;
+        const imgBlob=imageMap[fname.toLowerCase()+'__blob']||null;
         const el={id,type:'image',filename:fname,
           x,y,z,visible:true,w,h,
-          data:imgData};
+          data:imgData,
+          blob:imgBlob};
         pendingElems.push(el);
       }
     }
@@ -1878,7 +1912,8 @@ function parseSetting(text, imageMap){
   }
   if(backFile){
     const isVid=isVideoFile(backFileName);
-    backData={data:backFile,name:backFileName,isVideo:isVid};
+    const backBlob=imageMap[backFileName.toLowerCase()+'__blob']||null;
+    backData={data:backFile,name:backFileName,isVideo:isVid,blob:backBlob};
     showBackground(backFile,backFileName,isVid);
   }
 
