@@ -48,6 +48,7 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 .snap-line.snap-v{top:0;bottom:0;width:1px;background:rgba(255,200,0,.8);box-shadow:0 0 3px rgba(255,200,0,.5)}
 .snap-line.show{opacity:1}
 #backImg{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;z-index:0;pointer-events:none}
+#backVid{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;z-index:0;pointer-events:none;display:none}
 .ce{position:absolute;cursor:move;user-select:none}
 .ce.sel .ei2{outline:2px solid var(--accent)!important;outline-offset:0}
 .ei2{position:relative;width:100%;height:100%;overflow:visible}
@@ -123,7 +124,7 @@ select option{background:#1f1f25}
   <button class="btn" onclick="chZoom(.1)">+</button>
   <button class="btn" onclick="chZoom(0)">Fit</button>
   <div class="sep"></div>
-  <button class="btn" onclick="loadBack()">🖼 Background</button>
+  <button class="btn" onclick="loadBack()" title="Load background: PNG, JPG, GIF, MP4, AVI, WMV">🖼 Background</button>
   <button class="btn" onclick="loadImgLayer()">+ Image Layer</button>
   <div class="sep"></div>
   <button class="btn" onclick="clearAll()" style="color:var(--red)">Clear</button>
@@ -215,6 +216,7 @@ select option{background:#1f1f25}
     <div id="cw" onclick="desel(event)" ondragover="cwDragOver(event)" ondrop="cwDrop(event)">
       <div id="co"><div id="canvas">
   <img id="backImg" src="" style="display:none">
+  <video id="backVid" autoplay loop muted playsinline></video>
   <div class="snap-line snap-h" id="snapH" style="top:50%"></div>
   <div class="snap-line snap-v" id="snapV" style="left:50%"></div>
 </div></div>
@@ -247,7 +249,7 @@ select option{background:#1f1f25}
 // ── STATE ──────────────────────────────────────────────────────────────────
 let ori='vertical', CW=462, CH=1920, zoom=0.4;
 let elems=[], selId=null, nid=1, nz=1, niz=0;
-let backData=null;
+let backData=null; // {data:dataURL, name:filename, isVideo:bool}
 let themeColors=['#FFFF0000','#FFFF9500','#FFFFFFFF','#FF000000','#FF00B3EA','#FF66BB17'];
 let snapEnabled=true;
 let fontFiles={}; // family name -> {name, data (ArrayBuffer)}
@@ -312,16 +314,40 @@ function applyZoom(){
 
 // ── BACKGROUND ────────────────────────────────────────────────────────────
 function loadBack(){
-  pick('image/*',f=>{
+  pick('image/*,video/mp4,video/x-msvideo,video/x-ms-wmv,.mp4,.avi,.wmv,.gif,.png,.jpg,.jpeg',f=>{
     const r=new FileReader();
     r.onload=e=>{
-      backData={data:e.target.result,name:f.name};
-      const img=document.getElementById('backImg');
-      img.src=e.target.result; img.style.display='block';
-      toast('Background: '+f.name);
+      const isVideo=isVideoFile(f.name);
+      backData={data:e.target.result,name:f.name,isVideo};
+      showBackground(e.target.result,f.name,isVideo);
+      toast('Background: '+f.name+(isVideo?' (video)':''));
     };
     r.readAsDataURL(f);
   });
+}
+
+function isVideoFile(name){
+  return /\.(mp4|avi|wmv|mov|webm)$/i.test(name);
+}
+
+function isGifFile(name){
+  return /\.gif$/i.test(name);
+}
+
+function showBackground(dataUrl, name, isVideo){
+  const img=document.getElementById('backImg');
+  const vid=document.getElementById('backVid');
+  if(isVideo){
+    // Show video, hide image
+    img.style.display='none'; img.src='';
+    vid.style.display='block';
+    vid.src=dataUrl;
+    vid.load(); vid.play().catch(()=>{});
+  } else {
+    // Show image (handles PNG, JPG, GIF — browser renders animated GIFs natively)
+    vid.style.display='none'; vid.src='';
+    img.src=dataUrl; img.style.display='block';
+  }
 }
 
 function loadImgLayer(){
@@ -848,13 +874,15 @@ async function exportTheme(){
   // README
   root.file('README.txt', buildReadme(name));
 
-  // Back image → source/back.png AND theme root (device looks in both)
+  // Back file → source/ AND theme root (device looks in both)
+  // Preserve original extension (back.png, back.mp4, back.gif, back.avi, back.wmv)
   if(backData){
+    const ext=backData.name.includes('.')?backData.name.split('.').pop().toLowerCase():'png';
+    const backFilename='back.'+ext;
     const blob=await (await fetch(backData.data)).blob();
-    src.file('back.png',blob);
-    // Device also expects back.png in the theme root folder
+    src.file(backFilename, blob);
     const blob2=await (await fetch(backData.data)).blob();
-    root.file('back.png',blob2);
+    root.file(backFilename, blob2);
   }
 
   // Image layers → source/
@@ -1006,9 +1034,14 @@ function buildSetting(name){
 function fmt(v){const n=parseFloat(v);return Number.isInteger(n)?n:parseFloat(n.toFixed(6));}
 
 function buildJson(name){
+  const ext=backData?.name?.split('.').pop().toLowerCase()||'png';
+  const backFilename=backData?'back.'+ext:null;
+  const isVid=backData?.isVideo||false;
   return JSON.stringify({IsDefault:true,Type:1,Name:name,Width:parseFloat(CW),Height:parseFloat(CH),
     FillMode:0,CropArea:"0, 0, 0, 0",ThumbnailImageData:null,DisplayDirection:0,FontDirection:0,
-    BackgroundImage:null,BackgroundVideoFile:null,DisplayTexts:[],DisplayImages:[],TouchPoints:[],
+    BackgroundImage:(!isVid&&backFilename)?backFilename:null,
+    BackgroundVideoFile:(isVid&&backFilename)?backFilename:null,
+    DisplayTexts:[],DisplayImages:[],TouchPoints:[],
     ShutDownCancelPoint:{TPType:0,IconPath:"",Content:"",X1:0,X2:0,Y1:0,Y2:0},
     IsTouch:0,IsApp:0,Isup:false},null,2);
 }
@@ -1599,7 +1632,7 @@ async function importFromFileList(themeName, files, settingFile){
     const settingTxt=await settingFile.text();
     // Build imageMap from the file list
     const imageMap={};
-    const imgFiles=files.filter(f=>/\.(png|jpg|jpeg)$/i.test(f.name));
+    const imgFiles=files.filter(f=>/\.(png|jpg|jpeg|gif|mp4|avi|wmv|mov)$/i.test(f.name));
     await Promise.all(imgFiles.map(f=>new Promise(res=>{
       const r=new FileReader();
       r.onload=e=>{
@@ -1650,14 +1683,16 @@ async function importFromZip(file){
     zip.forEach((path,entry)=>{
       if(entry.dir) return;
       const fname=path.split('/').pop().toLowerCase();
-      if(/^(back|d\d+)\.(png|jpg|jpeg)$/i.test(fname)||
-         (path.includes('source/') && /\.(png|jpg|jpeg)$/i.test(fname))){
+      if(/^(back|d\d+)\.(png|jpg|jpeg|gif|mp4|avi|wmv|mov)$/i.test(fname)||
+         (path.includes('source/') && /\.(png|jpg|jpeg|gif|mp4|avi|wmv|mov)$/i.test(fname))){
         imgPromises.push(
           entry.async('base64').then(b64=>{
-            const ext=fname.split('.').pop();
-            const mime=ext==='png'?'image/png':'image/jpeg';
+            const ext=fname.split('.').pop().toLowerCase();
+            const mimeMap={png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',
+              gif:'image/gif',mp4:'video/mp4',avi:'video/x-msvideo',
+              wmv:'video/x-ms-wmv',mov:'video/quicktime'};
+            const mime=mimeMap[ext]||'application/octet-stream';
             imageMap[fname]='data:'+mime+';base64,'+b64;
-            // Also store by the original filename (non-lowercased)
             const origName=path.split('/').pop();
             imageMap[origName]='data:'+mime+';base64,'+b64;
           })
@@ -1799,7 +1834,7 @@ function parseSetting(text, imageMap){
     } else {
       // Image layer: filename is the type part, e.g. "d1.png" or "back.png"
       const fname=typePart;
-      if(/\.(png|jpg|jpeg)$/i.test(fname)){
+      if(/\.(png|jpg|jpeg|gif|mp4|avi|wmv|mov)$/i.test(fname)){
         const w=parseInt(p.width||p.Width||CW);
         const h=parseInt(p.height||p.Height||CH);
         const imgData=imageMap[fname]||imageMap[fname.toLowerCase()]||null;
@@ -1834,11 +1869,17 @@ function parseSetting(text, imageMap){
   }
 
   // Determine background image
-  const backImg=imageMap['back.png']||imageMap['back.PNG']||null;
-  if(backImg){
-    backData={data:backImg,name:'back.png'};
-    const img=document.getElementById('backImg');
-    img.src=backImg; img.style.display='block';
+  // Find background file — could be any supported format
+  const backExts=['png','jpg','jpeg','gif','mp4','avi','wmv','mov'];
+  let backFile=null, backFileName='back.png';
+  for(const ext of backExts){
+    const candidate=imageMap['back.'+ext]||imageMap['back.'+ext.toUpperCase()]||null;
+    if(candidate){backFile=candidate; backFileName='back.'+ext; break;}
+  }
+  if(backFile){
+    const isVid=isVideoFile(backFileName);
+    backData={data:backFile,name:backFileName,isVideo:isVid};
+    showBackground(backFile,backFileName,isVid);
   }
 
   // Add all elements to canvas

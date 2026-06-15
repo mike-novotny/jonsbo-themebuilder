@@ -49,7 +49,7 @@ Click **Import Folder** to point the browser at a folder on your machine. This w
 ```
 C:\Users\<YourUsername>\AppData\Local\JONSBO-AIO\Programme\MyTheme\
 ```
-The builder reads `Setting.txt`, `back.png`, and all image layers (`d1.png`, `d2.png`, etc.) from both the root and `source\` subfolder, and loads the theme immediately.
+The builder reads `Setting.txt`, `back.png` (or video background), and all image layers (`d1.png`, `d2.png`, etc.) from both the root and `source\` subfolder, and loads the theme immediately.
 
 **Programme folder** — navigate directly to:
 ```
@@ -85,7 +85,7 @@ Ring gauges and their centered text labels are automatically re-linked on import
 2. Open it in Chrome or Edge
 3. Choose **▯ Vertical** or **▭ Horizontal** orientation
 4. Click **💾 Export ZIP** when prompted — enter a theme name (no spaces or special characters)
-5. Click **🖼 Background** to load your `back.png` background image
+5. Click **🖼 Background** to load your background file — PNG, JPG, GIF (animated), MP4, AVI, or WMV
 6. Add elements by clicking items in the left sidebar, or drag them directly onto the canvas
 7. Click an element to select it — drag to move, drag the gold corner handle to resize
 8. Edit all properties in the right panel: position, size, colors, font, sensor binding, z-order
@@ -114,16 +114,16 @@ C:\Users\<YourUsername>\AppData\Local\JONSBO-AIO\Programme\
     ├── Setting.txt
     ├── YourThemeName.json
     ├── demo.png              ← thumbnail shown in the theme browser
-    ├── back.png              ← background image (must also be in root)
+    ├── back.*                ← background file in ROOT (back.png/gif/mp4/avi/wmv)
     ├── font\
     │   └── YourFont.ttf
     └── source\
-        ├── back.png          ← copy of background image
+        ├── back.*            ← copy of background file (same format as root)
         ├── d1.png
         └── d2.png
 ```
 
-> **back.png must exist in both locations** — in the theme root folder and inside `source\`. The Jonsbo software checks both. The Theme Builder exports it to both automatically.
+> **The background file must exist in both locations** — in the theme root folder and inside `source\`. The Jonsbo software checks both. The Theme Builder exports it to both automatically, preserving the original file extension.
 
 5. Launch the Jonsbo AIO application
 6. Navigate to **Screen Vertical** or **Screen Horizontal** depending on your theme orientation
@@ -216,7 +216,7 @@ All images must be exactly these dimensions.
 
 | Filename | Role |
 |----------|------|
-| `back.png` | Background — loaded by the display software behind all layers. Must exist in both the theme root and `source\`. |
+| `back.png` / `back.gif` / `back.mp4` / `back.avi` / `back.wmv` | Background — loaded by the display software behind all layers. Must exist in both the theme root and `source\`. Animated GIFs and video files loop automatically. |
 | `d1.png` | Layer 1 — usually the main background art or dark base. |
 | `d2.png` | Layer 2 — foreground overlay (character art, UI chrome) on a transparent background. |
 | `d3.png`… | Additional layers, named sequentially. |
@@ -227,7 +227,7 @@ All images must be exactly these dimensions.
 2. Design your background — save a flattened copy as `back.png`
 3. For overlays (character art, panel borders), keep foreground elements on a **transparent background** and export as PNG-24 with transparency as `d1.png`, `d2.png`, etc.
 4. Leave transparent areas where live data elements (text, bars, rings) will appear — the display software renders those on top
-5. Load `back.png` using the **🖼 Background** button, and image layers using **+ Image Layer**
+5. Load your background using the **🖼 Background** button — supports PNG, JPG, GIF (animated), MP4, AVI, and WMV. Image layers (d1.png etc.) use **+ Image Layer** and support PNG only.
 
 ### Z-Order
 
@@ -391,6 +391,13 @@ Example: `#FFFF0000` = solid red. `#80000000` = 50% transparent black.
 ---
 
 ## Version History
+
+### v7
+- Background supports PNG, JPG, GIF (animated), MP4, AVI, and WMV — file picker accepts all formats
+- Video backgrounds loop and play automatically in the preview canvas
+- Export preserves the original file extension (`back.mp4`, `back.gif`, etc.) in both root and `source\`
+- JSON export sets `BackgroundVideoFile` for video and `BackgroundImage` for still images
+- Import (ZIP and folder) detects and restores video backgrounds automatically
 
 ### v6
 - **Import Folder** — point at a single theme folder or the entire `Programme\` directory; visual picker with thumbnails when multiple themes are found
