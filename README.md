@@ -1,111 +1,135 @@
 # Jonsbo 916 Theme Builder
 
-A browser-based visual editor for creating custom themes for the **Jonsbo 916** series LCD display panels. Design your theme with a live preview, position elements by dragging, and export a ready-to-use ZIP with the correct folder structure.
+A browser-based visual editor for creating and editing custom themes for the **Jonsbo 916** series LCD display panels. Design themes with a live preview, import existing themes to modify them, and export a ready-to-use ZIP with the correct folder structure.
 
 ![Theme Builder Screenshot](screenshot.png)
+
+> **Browser requirement:** Chrome or Edge is strongly recommended. Firefox lacks support for folder import and system font loading. All other features work in any modern browser.
 
 ---
 
 ## Features
 
-- **Visual canvas editor** — 462×1920 (vertical) or 1920×462 (horizontal) canvas scaled to fit your screen
-- **Drag to place, drag to move, drag corner to resize** every element
-- **Live preview** — sensor values shown with realistic sample data so you can see how it will look
+- **Visual canvas editor** — 462×1920 (vertical) or 1920×462 (horizontal) canvas with zoom and fit-to-window
+- **Drag to place, move, and resize** every element — or use arrow keys to nudge (Shift+arrow = 10px)
+- **Drag and drop** elements from the sidebar directly onto the canvas
+- **Live preview** — all elements show realistic sample sensor values so you can see the result before deploying
 - **All element types supported:**
-  - Text (live sensor data with optional prefix and unit)
-  - Progress bars (horizontal or vertical, fully styled)
-  - Ring gauges (circular arc progress, RingProgressBar)
-  - Static labels (fixed text)
-  - Decorative blocks (solid color panels, dividers)
-  - Image layers (d1.png, d2.png, etc.)
-- **Full sensor library** — every data binding found across all built-in themes
-- **Font picker** — built-in theme fonts dropdown, system font loader (Chrome/Edge), and custom font entry
-- **ZIP export** — downloads a `.zip` with the exact folder structure the display expects, including your image assets
-- **Layer panel** — see z-order, toggle visibility, delete elements
-- **Keyboard shortcuts** — arrow keys nudge (Shift+arrow = 10px), Delete removes selected element
+  - Sensor text (live data with optional prefix and unit)
+  - Static labels (fixed custom text)
+  - Progress bars (horizontal or vertical, fully styled with animation)
+  - Ring gauges (circular arc, RingProgressBar) with optional centered label
+  - Decorative blocks (solid color panels and dividers)
+  - Image layers (back.png, d1.png, d2.png, etc.)
+- **Full sensor library** — every data binding discovered across all built-in themes
+- **Font picker** — built-in theme fonts, system font loader (Chrome/Edge), custom font entry, and font file upload for export
+- **Theme color palette** — save and reuse colors across all element types
+- **Snap & Align** — center on canvas, snap to edges, snap-while-dragging guide lines, align elements to each other
+- **Import themes** — load existing themes from a ZIP, a Setting.txt file, a theme folder, or the entire Programme folder
+- **ZIP export** — downloads the complete theme folder structure including images, fonts, and auto-captured demo.png
+
+---
+
+## Importing an Existing Theme
+
+There are four ways to open an existing theme for editing. All import options are in the toolbar.
+
+### 📂 Import Theme — ZIP or Setting.txt
+
+Click **Import Theme** to open a single file:
+
+- **ZIP file** — a full theme package (e.g. exported from this builder). All images, the Setting.txt, and the theme name are loaded automatically.
+- **Setting.txt** — just the layout file on its own. All elements are loaded. Image layers will appear as placeholders; use the **Background** and **Add Image Layer** buttons to load image files manually afterward.
+
+### 📁 Import Folder — Single theme or entire Programme folder
+
+Click **Import Folder** to point the browser at a folder on your machine. This works in two ways:
+
+**Single theme folder** — navigate to a theme folder such as:
+```
+C:\Users\<YourUsername>\AppData\Local\JONSBO-AIO\Programme\MyTheme\
+```
+The builder reads `Setting.txt`, `back.png`, and all image layers (`d1.png`, `d2.png`, etc.) from both the root and `source\` subfolder, and loads the theme immediately.
+
+**Programme folder** — navigate directly to:
+```
+C:\Users\<YourUsername>\AppData\Local\JONSBO-AIO\Programme\
+```
+The builder scans every subfolder, finds all valid themes (any folder containing a `Setting.txt`), and shows a **visual picker** with each theme's name, file count, and `demo.png` thumbnail. Click any theme to load it.
+
+> **Finding the Programme folder quickly:** Press `Win + R`, type `%LocalAppData%\JONSBO-AIO\Programme` and press Enter. This opens the folder directly in Explorer. Then switch to the Theme Builder and click Import Folder.
+
+> **Browser note:** Folder import uses the `webkitdirectory` API, which is supported in Chrome and Edge. Firefox may have limitations with deeply nested folders.
+
+### What gets imported
+
+| Element in Setting.txt | Imported as |
+|------------------------|-------------|
+| `Text:` (sensor data) | Sensor text element |
+| `Text:` with `IsDefaultText@true` | Static label |
+| `BorderLine:` with `data@` | Progress bar |
+| `BorderLine:` without `data@` | Decorative block |
+| `RingProgressBar:` | Ring gauge |
+| `d1.png:`, `d2.png:` etc. | Image layers |
+| `back.png` | Background image |
+| `name:` field | Theme name (populates the name input) |
+| `width:` field | Orientation (462 = Vertical, 1920 = Horizontal) |
+
+Ring gauges and their centered text labels are automatically re-linked on import — if a `Text` element shares the same `data@` key as a `RingProgressBar` and has an adjacent z-value, they are treated as a linked pair and move/resize together in the editor.
+
+---
+
+## Creating a New Theme
+
+1. Download `ThemeBuilder.html`
+2. Open it in Chrome or Edge
+3. Choose **▯ Vertical** or **▭ Horizontal** orientation
+4. Click **💾 Export ZIP** when prompted — enter a theme name (no spaces or special characters)
+5. Click **🖼 Background** to load your `back.png` background image
+6. Add elements by clicking items in the left sidebar, or drag them directly onto the canvas
+7. Click an element to select it — drag to move, drag the gold corner handle to resize
+8. Edit all properties in the right panel: position, size, colors, font, sensor binding, z-order
+9. Use **Snap & Align** in the position section to center or align elements to each other
+10. Click **💾 Export ZIP** when done — a clean `demo.png` preview is captured automatically
 
 ---
 
 ## Installing a Theme on the Device
 
-> **Important:** The Jonsbo AIO application must be **completely closed** before copying theme files. Check the system tray (bottom-right corner of the taskbar, click the `^` arrow to show hidden icons) and right-click the Jonsbo icon → **Exit** to fully close it. Simply closing the main window may leave it running in the tray.
+> **Important:** Fully close the Jonsbo AIO application before copying theme files. Check the system tray (bottom-right taskbar, click the `^` arrow) and right-click the Jonsbo icon → **Exit**. Simply closing the main window leaves it running in the background.
 
-1. Export your theme as a ZIP from the Theme Builder
-2. Extract the ZIP — you will get a folder named after your theme
+1. Export your theme as a ZIP from the Theme Builder, or prepare your theme folder manually
+2. Extract the ZIP (if applicable) — you will get a folder named after your theme
 3. Copy the entire theme folder into the Jonsbo programme directory:
 
 ```
 C:\Users\<YourUsername>\AppData\Local\JONSBO-AIO\Programme\
 ```
 
-> **Finding AppData:** AppData is a hidden folder. The quickest way to reach it is to press `Win + R`, type `%LocalAppData%\JONSBO-AIO\Programme` and press Enter. This opens the folder directly.
-
-4. The final structure should look like this:
+4. The final structure must look like this:
 
 ```
 C:\Users\<YourUsername>\AppData\Local\JONSBO-AIO\Programme\
 └── YourThemeName\
     ├── Setting.txt
     ├── YourThemeName.json
-    ├── demo.png
+    ├── demo.png              ← thumbnail shown in the theme browser
+    ├── back.png              ← background image (must also be in root)
     ├── font\
-    │   └── (your .ttf font files)
+    │   └── YourFont.ttf
     └── source\
-        ├── back.png
+        ├── back.png          ← copy of background image
         ├── d1.png
         └── d2.png
 ```
 
+> **back.png must exist in both locations** — in the theme root folder and inside `source\`. The Jonsbo software checks both. The Theme Builder exports it to both automatically.
+
 5. Launch the Jonsbo AIO application
-6. Navigate to **Screen Vertical** or **Screen Horizontal** depending on your theme orientation — your new theme will appear in the list there
-7. Select your theme and apply it
+6. Navigate to **Screen Vertical** or **Screen Horizontal** depending on your theme orientation
+7. Your new theme will appear in the list — select it and apply
 
-> **demo.png** — This is the thumbnail shown in the theme browser. Take a screenshot of the canvas preview in the Theme Builder, crop it to the theme dimensions, and save it as `demo.png` inside the theme folder. Without it the theme will still work but will show a blank thumbnail.
-
-### Font Installation
-
-If your theme uses custom fonts, the font files must be installed in **two places**:
-
-- Inside the theme's `font\` folder (so the theme package is self-contained for sharing)
-- Installed on the Windows system running the Jonsbo software — right-click the `.ttf` file in Windows Explorer and select **Install** or **Install for all users**
-
-The `FontFamily` name in `Setting.txt` must match the font's internal name as Windows recognises it, which is not always the same as the filename.
-
----
-
-## Getting Started with the Builder
-
-1. Download `ThemeBuilder.html`
-2. Open it in any modern browser — Chrome or Edge recommended for full font support
-3. Choose **Vertical** or **Horizontal** orientation
-4. Enter a theme name (no spaces)
-5. Click **🖼 Background** to load your `back.png`
-6. Click elements in the left sidebar to add them to the canvas
-7. Click an element to select it, drag to move, drag the gold corner handle to resize
-8. Edit properties in the right panel — including font family via the font picker
-9. Click **💾 Export ZIP** when done
-
----
-
-## Export Structure
-
-When you click Export ZIP, the download contains:
-
-```
-ThemeName/
-├── Setting.txt          ← main layout file (auto-generated)
-├── ThemeName.json       ← theme config (auto-generated)
-├── demo.png             ← auto-captured preview thumbnail
-├── back.png             ← background image in ROOT (device checks here first)
-├── font/
-│   └── (place your .ttf font files here)
-└── source/
-    ├── back.png         ← background image copy in source/ (auto-included)
-    ├── d1.png           ← image layers (auto-included if loaded)
-    └── d2.png
-```
-
-> **back.png must exist in both locations.** The Jonsbo software looks for `back.png` in the theme root folder. The `source/` copy is kept for completeness. The Theme Builder exports it to both automatically.
+> **demo.png** — This is the thumbnail shown in the theme browser. The Theme Builder captures it automatically during export. If you need to regenerate it, use the **📷 demo.png** button in the toolbar.
 
 ---
 
@@ -113,54 +137,71 @@ ThemeName/
 
 ### Using the Font Picker
 
-The font property panel has three ways to choose a font:
+When a text element is selected, the Font section of the properties panel offers:
 
-- **Dropdown** — all fonts found in the built-in Jonsbo themes, pre-loaded and ready to use. Also populated with your system fonts after loading them.
-- **Load System Fonts** button — queries all fonts currently installed on your Windows machine and adds them to the dropdown. Requires Chrome or Edge (not Firefox), and a one-time permission popup will appear asking for font access — click Allow.
-- **Custom entry** — type any font name directly into the text field below the dropdown for fonts not in either list. The exact internal font name must be used.
+- **Dropdown** — all fonts found in the built-in Jonsbo themes, listed first. Populated with system fonts after you click Load System Fonts.
+- **🔍 Load System Fonts** — queries all fonts installed on your Windows machine (Chrome/Edge only). A one-time permission popup appears — click Allow. Fonts are added to the dropdown immediately.
+- **Custom text field** — type any font name directly. The dropdown updates to select it if it matches, or adds it as a custom entry.
+- **📁 Add Font File** — pick a `.ttf` or `.otf` file from disk. The font is registered with the browser for live preview, and stored so it is automatically included in the `font\` folder when you export the ZIP. This is the most reliable way to ensure fonts are exported correctly.
 
-### Loading and Installing New Fonts
+### Font Export
 
-The recommended workflow for using a custom font in your theme:
+When exporting a ZIP the builder tries two methods for including fonts:
 
-1. Download the font `.ttf` or `.otf` file
-2. Right-click the font file in Windows Explorer and select **Install** (or **Install for all users**)
-3. Open the Theme Builder in Chrome or Edge
-4. Select a text element, then click **🔍 Load System Fonts** in the font section
-5. Accept the font access permission when prompted
-6. Your newly installed font will appear in the dropdown — select it
-7. When you export your theme ZIP, copy the font file into the `font\` subfolder before installing the theme
+1. **Explicitly uploaded files** (via Add Font File) — included directly, works in any browser
+2. **System font API** (Chrome/Edge only) — attempts to extract the font file from the OS for any fonts not manually uploaded
 
-> **Why install on Windows first?** The Theme Builder uses your browser's access to locally installed fonts. The font must be registered with Windows for it to appear in the system font list. Simply having the `.ttf` file sitting in a folder is not enough.
+A `FONTS_NOTE.txt` is always written to the `font\` folder listing which fonts are `[included]` and which are `[MISSING]`, so you always know exactly what needs to be added manually.
 
-> **Font name vs filename:** The name you must use in `FontFamily@#` in `Setting.txt` is the font's **internal name** as Windows knows it — this is shown in the dropdown after loading system fonts. It is often different from the filename. For example, `TomorrowEB.ttf` might have the internal name `Tomorrow ExtraBold`.
+### Font Installation on the Device
 
-### Font Files in Your Theme
+Fonts must be installed in two places for a theme to display correctly:
 
-Font files must be placed in the `font\` subfolder of your theme folder. The font must also be installed on the Windows system running the Jonsbo AIO software — the `font\` folder ensures the package is self-contained for sharing, but the font still needs to be installed on the target machine separately.
+- Inside the theme's `font\` folder (for portability and sharing)
+- Installed on the Windows machine running the Jonsbo AIO software — right-click the `.ttf` file → **Install** or **Install for all users**
+
+> The `FontFamily` name in `Setting.txt` must match the font's **internal registered name** in Windows, which is not always the same as the filename. The Theme Builder's font dropdown shows the correct internal names.
 
 ### Built-in Theme Fonts
 
-Fonts found across the official Jonsbo 916 built-in themes:
-
 | Font name | Style |
 |-----------|-------|
-| `HarmonyOS Sans SC` | Huawei system sans-serif — also available as `HarmonyOS Sans SC Light`, `HarmonyOS Sans SC Medium`, `HarmonyOS Sans SC Black` |
+| `HarmonyOS Sans SC` | Clean sans-serif in four weights: regular, Light, Medium, Black |
 | `Square721 BT` | Monospace / tech display |
 | `Tomorrow ExtraBold` | Geometric sans-serif, very bold |
-| `Oswald Stencil` | Condensed stencil |
+| `Oswald Stencil` | Condensed stencil display |
 | `Cinzel` | Classical serif |
 | `站酷高端黑` | Chinese display, bold gothic |
 | `站酷庆科黄油体` | Chinese display, rounded butter style |
 | `猫啃忘形圆` | Chinese display, rounded |
 
-Any `.ttf` or `.otf` font installed on the display device can be referenced by name.
+---
+
+## Snap & Align
+
+Every element's property panel includes a **Snap & Align** section:
+
+| Control | What it does |
+|---------|-------------|
+| ↔ H Center | Center element horizontally on the canvas |
+| ↕ V Center | Center element vertically on the canvas |
+| ⇤ L / ⇥ R / ⇡ T / ⇣ B | Snap element to a canvas edge |
+| Align to dropdown | Pick any other element on the canvas |
+| ⇤ L-edge / ⇥ R-edge | Align left or right edges to the target element |
+| ⇡ T-edge / ⇣ B-edge | Align top or bottom edges to the target element |
+| ↕ V-center | Align vertical midpoints with the target element |
+| ↔ H-center | Align horizontal midpoints with the target element |
+| Snap drag checkbox | When on, elements snap to the canvas center lines while dragging — a gold guide line flashes to confirm the snap |
+
+---
+
+## Theme Color Palette
+
+Every color picker has a **+** button next to it that saves the current color to the palette. The palette appears as a row of colored swatches below each color picker on all element types (text, bars, rings, decorative blocks). Click any swatch to apply that color to the current element. The palette holds up to 16 colors and persists for the browser session.
 
 ---
 
 ## Preparing Image Assets
-
-Themes are built from layered PNG images combined with live data elements. Understanding the image dimensions and naming conventions is essential before you start designing.
 
 ### Canvas Dimensions
 
@@ -169,50 +210,38 @@ Themes are built from layered PNG images combined with live data elements. Under
 | Vertical | 462 px | 1920 px |
 | Horizontal | 1920 px | 462 px |
 
-All images must be created at exactly these dimensions so they align perfectly with the canvas coordinates in `Setting.txt`.
+All images must be exactly these dimensions.
 
 ### Image Files and Their Roles
 
-| Filename | Role | Notes |
-|----------|------|-------|
-| `back.png` | Background image | Loaded separately by the display software behind all layers. Often a photo or illustration. |
-| `d1.png` | Layer 1 (bottom) | First composited image layer. Usually the main background art or a dark base panel. |
-| `d2.png` | Layer 2 | Overlay art — UI chrome, panel frames, decorative borders, character art with transparent background. |
-| `d3.png`, `d4.png`… | Additional layers | Use as many as needed, named sequentially. |
+| Filename | Role |
+|----------|------|
+| `back.png` | Background — loaded by the display software behind all layers. Must exist in both the theme root and `source\`. |
+| `d1.png` | Layer 1 — usually the main background art or dark base. |
+| `d2.png` | Layer 2 — foreground overlay (character art, UI chrome) on a transparent background. |
+| `d3.png`… | Additional layers, named sequentially. |
 
-All image layers go in the `source\` folder inside your theme directory.
+### Workflow
 
-### Creating the Images
+1. Create a document at 462×1920px (vertical) or 1920×462px (horizontal) in Photoshop, GIMP, or similar
+2. Design your background — save a flattened copy as `back.png`
+3. For overlays (character art, panel borders), keep foreground elements on a **transparent background** and export as PNG-24 with transparency as `d1.png`, `d2.png`, etc.
+4. Leave transparent areas where live data elements (text, bars, rings) will appear — the display software renders those on top
+5. Load `back.png` using the **🖼 Background** button, and image layers using **+ Image Layer**
 
-**Recommended workflow in Photoshop, GIMP, or similar:**
+### Z-Order
 
-1. Create a new document at **462 × 1920 px** (vertical) or **1920 × 462 px** (horizontal), 72 dpi, RGB
-2. Design your background — photo, illustration, or solid/gradient. Save a flattened copy as `back.png`
-3. For layered artwork (e.g. a robot character over a background), separate the layers:
-   - `d1.png` — background scene, full canvas, no transparency needed
-   - `d2.png` — foreground elements (character, UI frames, overlays) on a **transparent background** — export as PNG-24 with transparency
-4. Leave blank/transparent areas in `d2.png` wherever live data text and bars will appear — those are rendered on top by the display software
+Image layers always sit behind data elements. The builder enforces this automatically on the canvas and at export time.
 
-**Background removal:** If your source image has a solid background you want to remove for `d2.png`, use Photoshop's "Remove Background" button, GIMP's fuzzy select + delete, or an online tool like remove.bg.
-
-**Saving:** Always export as PNG (not JPG) to preserve transparency and avoid compression artefacts on text-adjacent areas.
-
-### Z-Order and Layering
-
-Image layers must have lower z-values than all data elements (text, bars, ring gauges) so they don't cover them. The Theme Builder enforces this automatically — when you add an image layer, it is placed beneath all existing data elements. At export, the `Setting.txt` z-values are also verified to ensure images never sit above data assets.
-
-A typical z-order stack:
 ```
-z = 1     d1.png   ← bottom background
+z = 1     d1.png   ← background art
 z = 2     d2.png   ← foreground art overlay
-z = 10+   Text, BorderLine, RingProgressBar elements
+z = 10+   Text, BorderLine, RingProgressBar
 ```
 
 ---
 
 ## Setting.txt Format Reference
-
-The `Setting.txt` file is a plain-text layer stack. Each line declares one element with `@`-separated key-value pairs.
 
 ### Header
 ```
@@ -223,116 +252,114 @@ height:1920
 
 ### Text element
 ```
-Text:x@50,y@100,z@10,maxheight@80,maxwidth@500,FontSize@36,FontFamily@#Arial,Foreground@#FFFFFFFF,Title@,data@CpuUsage,unit@%
+Text:x@50,y@100,z@10,maxheight@80,maxwidth@500,FontSize@36,FontFamily@#Cinzel,Foreground@#FFFFFFFF,Title@,data@CpuUsage,unit@%
 ```
 
 | Field | Description |
 |-------|-------------|
-| `x`, `y` | Position in pixels from top-left |
+| `x`, `y` | Top-left position in pixels |
 | `z` | Layer order (higher = in front) |
-| `maxheight`, `maxwidth` | Bounding box |
+| `maxheight`, `maxwidth` | Bounding box — text is clipped to this area |
 | `FontSize` | Font size in pixels |
-| `FontFamily` | Font name prefixed with `#` |
-| `Foreground` | Text color in `#AARRGGBB` format |
-| `Title` | Static prefix text shown before the value |
-| `data` | Sensor binding key (see table below) |
+| `FontFamily` | Font internal name prefixed with `#` |
+| `Foreground` | Text color in `#AARRGGBB` |
+| `Title` | Static prefix shown before the live value |
+| `data` | Sensor binding key |
 | `unit` | Suffix appended after the value (e.g. `℃`, `%`) |
-| `IsDefaultText@true` | Marks this as a static label (data field used as literal text) |
+| `IsDefaultText@true` | Makes this a static label — `data` field is used as literal text |
 
 ### Progress bar (BorderLine)
 ```
-BorderLine:x@40,y@500,z@8,maxheight@40,maxwidth@360,MaxNum@100,CornerRadius@0 0 0 0,Fill@#FF499CDE,IsAnimationEnabled@False,BorderThicknes@2,BorderFill@#FFFFFFFF,BackColor@#00000000,data@CpuUsage
+BorderLine:x@40,y@500,z@8,maxheight@40,maxwidth@360,MaxNum@100,CornerRadius@0 0 0 0,Fill@#FF499CDE,IsAnimationEnabled@True,BorderThicknes@2,BorderFill@#FFFFFFFF,BackColor@#00000000,data@CpuUsage
 ```
 
 | Field | Description |
 |-------|-------------|
 | `maxheight`, `maxwidth` | Bar dimensions |
-| `MaxNum` | Value that represents 100% fill (use `100` for %, `200` for °C) |
-| `Fill` | Bar fill color (`#AARRGGBB`) |
+| `MaxNum` | Value that equals 100% fill — typically `100` for percentages |
+| `Fill` | Bar fill color |
 | `BorderFill` | Border/outline color |
 | `BackColor` | Background track color |
-| `BorderThicknes` | Border width in pixels (note: single `s`) |
-| `CornerRadius` | Four corner radii: `TL TR BR BL` |
+| `BorderThicknes` | Border width in pixels (note: single `s` — this is not a typo) |
+| `CornerRadius` | Four radii: `TL TR BR BL` |
 | `IsAnimationEnabled` | `True` or `False` |
-| `data` | Sensor binding key |
 
-A `BorderLine` **without** a `data@` field is a decorative block — no animation, just a solid colored rectangle.
+A `BorderLine` **without** a `data@` field is a decorative block — static colored rectangle, no animation.
 
 ### Ring gauge (RingProgressBar)
 ```
-RingProgressBar:x@150,y@50,z@12,RingWidth@12,Perimeter@127,MaxValue@200,IndexColor@#FF00B3EA,BackColor@#00000000,data@CPUTemp
+RingProgressBar:x@105,y@142,z@1,RingWidth@12,Perimeter@250,MaxValue@100,IndexColor@#FFFF0000,BackColor@#FFFF9500,data@CPUTemp
 ```
 
 | Field | Description |
 |-------|-------------|
-| `RingWidth` | Stroke thickness of the arc |
-| `Perimeter` | Circumference of the ring in pixels (`Perimeter ÷ 2π = radius`) |
+| `RingWidth` | Arc stroke thickness in pixels |
+| `Perimeter` | **Diameter** of the ring circle in pixels (not circumference) |
 | `MaxValue` | Value that represents a full ring |
-| `IndexColor` | Arc fill color (`#AARRGGBB`) |
+| `IndexColor` | Arc fill color |
 | `BackColor` | Track/background ring color |
-| `data` | Sensor binding key |
+
+To display a value inside the ring, add a `Text` element with the same `data@` key positioned at the same x/y with `maxwidth` and `maxheight` equal to the ring diameter. The builder handles this automatically via the "Show label" checkbox on ring gauges.
 
 ### Image layer
 ```
 d1.png:x@0,y@0,z@1,height@1920,width@462
 ```
 
-The filename is the element type. Files go in the `source\` folder. Multiple layers use `d1.png`, `d2.png`, `d3.png`, etc. A `back.png` is also supported as a separate background outside the layer stack.
+The filename is the element identifier. Files go in the `source\` folder.
 
 ### Color format
 
-All colors use `#AARRGGBB` — **alpha comes first**, unlike standard web hex colors:
+All colors use **`#AARRGGBB`** — alpha is the first byte, unlike standard CSS hex:
 
-| Value | Meaning |
-|-------|---------|
+| Prefix | Meaning |
+|--------|---------|
 | `#FF` | Fully opaque |
 | `#80` | ~50% transparent |
 | `#00` | Fully transparent |
 
-Example: `#FF66BB17` = fully opaque green. `#80000000` = 50% transparent black.
+Example: `#FFFF0000` = solid red. `#80000000` = 50% transparent black.
 
 ---
 
 ## Sensor Bindings
 
-All `data@` values discovered across the built-in 916 themes:
-
 ### CPU
 | Binding | Description |
 |---------|-------------|
-| `CpuUsage` | CPU utilization % |
-| `CPUTemp` | CPU temperature °C |
-| `CpuFrequency` | CPU clock speed MHz |
-| `CpuTEC` | CPU power draw W |
-| `CpuVoltage` | CPU voltage V |
-| `CPUName` | CPU model name string |
+| `CpuUsage` | Utilization % |
+| `CPUTemp` | Temperature °C |
+| `CpuFrequency` | Clock speed MHz |
+| `CpuTEC` | Power draw W |
+| `CpuVoltage` | Voltage V |
+| `CPUName` | Model name string |
 
 ### GPU
 | Binding | Description |
 |---------|-------------|
-| `GpuUsage` | GPU utilization % |
-| `GPUTemp` | GPU temperature °C |
-| `GpuFrequency` | GPU clock speed MHz |
-| `GpuTEC` | GPU power draw W |
-| `GpuVoltage` | GPU voltage V |
-| `GPUName` | GPU model name string |
+| `GpuUsage` | Utilization % |
+| `GPUTemp` | Temperature °C |
+| `GpuFrequency` | Clock speed MHz |
+| `GpuTEC` | Power draw W |
+| `GpuVoltage` | Voltage V |
+| `GPUName` | Model name string |
 
 ### RAM
 | Binding | Description |
 |---------|-------------|
-| `MemoryUseInt` | RAM usage % |
-| `MemoryUsageSize` | RAM used GB |
-| `MemoryCanUsageSize` | RAM available GB |
-| `MemorySize` | RAM total GB |
+| `MemoryUseInt` | Usage % |
+| `MemoryUsageSize` | Used GB |
+| `MemoryCanUsageSize` | Available GB |
+| `MemorySize` | Total GB |
 
 ### Storage
 | Binding | Description |
 |---------|-------------|
-| `HardDiskUsed` | SSD/HDD usage % |
-| `HardDiskUsedSize` | Used storage GB |
-| `HardDiskFree` | Free storage GB |
-| `HardDiskCapacity` | Total storage GB |
-| `DiskTemp` | Drive temperature °C |
+| `HardDiskUsed` | Usage % |
+| `HardDiskUsedSize` | Used GB |
+| `HardDiskFree` | Free GB |
+| `HardDiskCapacity` | Total GB |
+| `DiskTemp` | Temperature °C |
 
 ### Network
 | Binding | Description |
@@ -341,74 +368,63 @@ All `data@` values discovered across the built-in 916 themes:
 | `UpNetSpeed` | Upload speed |
 
 ### Time & Date
-| Binding | Description |
-|---------|-------------|
-| `CurrentTime` | Current time |
-| `CurrentTimeShut` | Current time (also triggers shutdown threshold) |
-| `CurrentDates` | Current date |
-| `WeekDaysL3` | Day of week abbreviation (Mon, Tue…) |
+| Binding | Output format | Notes |
+|---------|--------------|-------|
+| `CurrentTimeShut` | `HH:MM` | Recommended — no seconds, 24h |
+| `CurrentTime` | `HH:MM:SS` | Includes seconds, 24h |
+| `CurrentDates` | `YYYY.MM.DD` | System locale date |
+| `WeekDaysL3` | `Mon`, `Tue`… | Three-letter day abbreviation |
+
+> Both time bindings output 24-hour format. There is no known 12-hour binding in the current firmware.
 
 ---
 
-## Tips
+## Keyboard Shortcuts
 
-**Layering artwork** — The display system composites layers in z-order. A typical stack looks like:
-
-```
-z=1   d1.png  ← background art (full canvas)
-z=2   d2.png  ← foreground overlay / UI chrome (transparent PNG)
-z=3+  Text and BorderLine elements (live data)
-```
-
-Design your `d1.png` background and `d2.png` overlay in an image editor (Photoshop, GIMP, etc.) at exactly 462×1920px, then position live data elements on top in the Theme Builder.
-
-**Gauge trick** — The `RingProgressBar` only updates the arc fill. To make it look like a speedometer, place a large font `Text` element centered inside the ring to show the numeric value.
-
-**Vertical bars** — Make a `BorderLine` taller than it is wide (e.g. `maxheight@168, maxwidth@23`) for a vertical fill bar. The fill direction may differ by firmware version.
-
-**Alpha on borders** — Setting `BorderFill@#FFFFFF44` gives a subtle semi-transparent white border, common in the built-in themes.
+| Key | Action |
+|-----|--------|
+| Arrow keys | Nudge selected element 1px |
+| Shift + Arrow | Nudge selected element 10px |
+| Delete | Remove selected element |
+| Escape | Deselect |
 
 ---
 
 ## Version History
 
+### v6
+- **Import Folder** — point at a single theme folder or the entire `Programme\` directory; visual picker with thumbnails when multiple themes are found
+- **Import Theme** — load from ZIP file or Setting.txt; ring+label pairs automatically re-linked on import
+- All import methods reconstruct the full canvas including background, image layers, and all element types
+
 ### v5
-- "Scale w/resize" checkbox now defaults to on and moved to top of Font section
-- Ring gauge label renders value and unit on a single line (e.g. 46°C) using SVG tspan, sized to fit inside the ring
-- Ring label "Manual size" checkbox: label size input is disabled until checked; unchecking returns to auto-size
-- Image layers are automatically placed below all data assets in both the canvas and exported Setting.txt
-- Font files are auto-exported into the theme ZIP `font/` folder when system fonts are loaded in Chrome/Edge
-- Image preparation documentation added to README with canvas dimensions, file naming, and layering guide
+- Scale-with-resize checkbox for text (defaults on, moved to top of Font section)
+- Ring gauge built-in label with font, color, and manual size controls
+- Image layers always placed below data assets on canvas and in exported Setting.txt
+- Font file upload (Add Font File) for reliable font export
+- Image preparation documentation
 
 ### v4
-- Text elements have a "Scale w/resize" checkbox — when enabled, font size scales proportionally as you drag to resize
-- Ring gauges have a built-in label option: "Show label" checkbox displays the sensor value and unit centered inside the ring, auto-sized to the ring diameter
-- Ring label has its own color, font, and manual size override controls
-- Ring label and gauge resize together as one unit — label size scales with the ring
-- Ring gauge resize is constrained to square (equal width and height) and syncs the Diameter field live
+- Text bounding box auto-sizes to content on every change
+- Align-to-element: align edges and centers to any other element
+- Theme color palette on all color pickers (text, bars, rings, decorative)
+- Export name prompt
+- Snap & Align section with center snap and edge snap buttons
+- Snap-while-dragging guide lines
 
 ### v3
-- Font picker with built-in theme fonts dropdown, system font loader (Chrome/Edge), and custom font entry
-- Fixed color picker not saving or updating preview
-- Fixed ring gauge background track not rendering
-- Fixed element position drift on repeated re-renders
+- Font picker with system font loader and custom entry
+- Fixed color pickers not saving
+- Fixed ring gauge background track
 
 ### v2
-- RingProgressBar element with live SVG arc preview
-- Decorative BorderLine (solid block, no data binding)
-- ZIP export with correct folder structure and embedded image assets
-- New sensors: `DiskTemp`, `HardDiskFree`, `HardDiskUsedSize`, `DownNetSpeed`, `UpNetSpeed`, `CPUName`, `GPUName`
-- Bold text toggle
-- `IsAnimationEnabled` flag on progress bars
-- Improved layer panel and property editor
+- RingProgressBar element with live SVG preview
+- Decorative BorderLine
+- ZIP export with embedded images and fonts
+- New sensors: DiskTemp, HardDiskFree, DownNetSpeed, UpNetSpeed, CPUName, GPUName
 
 ### v1
-- Initial release
-- Drag-and-drop canvas editor
-- Text, progress bar, and image layer elements
-- Vertical/horizontal orientation
-- Core sensor bindings
-- Setting.txt and JSON export
+- Initial release — drag-and-drop canvas editor, core sensor bindings, Setting.txt/JSON export
 
 ---
 
@@ -420,4 +436,4 @@ Pull requests welcome. If you discover additional sensor bindings, element types
 
 ## Disclaimer
 
-This tool is an independent community project and is not affiliated with or endorsed by Jonsbo. Theme file formats were reverse-engineered from the built-in theme files included with the 916 display software.
+This is an independent community project, not affiliated with or endorsed by Jonsbo. The theme file format was reverse-engineered from the built-in themes included with the 916 display software.

@@ -89,6 +89,13 @@ body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,san
 .sdot{width:5px;height:5px;border-radius:50%;background:var(--green);display:inline-block;margin-right:4px}
 /* TOAST */
 #toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--border);color:var(--text);padding:8px 18px;border-radius:6px;font-size:12px;z-index:2000;opacity:0;transition:opacity .2s;pointer-events:none}
+.theme-picker{max-height:360px;overflow-y:auto;margin:10px 0}
+.theme-pick-item{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:4px;cursor:pointer;border:1px solid var(--border);margin-bottom:6px;transition:background .1s}
+.theme-pick-item:hover{background:var(--panel2);border-color:var(--accent)}
+.theme-pick-thumb{width:32px;height:80px;object-fit:cover;border-radius:2px;background:var(--panel2);flex-shrink:0}
+.theme-pick-info{flex:1;min-width:0}
+.theme-pick-name{font-size:13px;font-weight:600;color:var(--text)}
+.theme-pick-meta{font-size:11px;color:var(--muted);margin-top:2px}
 #toast.show{opacity:1}
 /* MODAL */
 .mbg{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;display:flex;align-items:center;justify-content:center}
@@ -121,6 +128,8 @@ select option{background:#1f1f25}
   <div class="sep"></div>
   <button class="btn" onclick="clearAll()" style="color:var(--red)">Clear</button>
   <button class="btn" onclick="captureDemo()" title="Save a clean screenshot as demo.png">📷 demo.png</button>
+  <button class="btn" onclick="importTheme()" title="Import a theme ZIP or Setting.txt to edit it">📂 Import Theme</button>
+  <button class="btn" onclick="importFolder()" title="Point at a theme folder or the Jonsbo Programme folder">📁 Import Folder</button>
   <button class="btn primary" onclick="exportTheme()">💾 Export ZIP</button>
 </div>
 
@@ -1478,6 +1487,370 @@ function applyThemeColor(field,argb){
   renderEl(el);
   if(el.type==='ring') syncRingLabel(el);
   renderProps(el);
+}
+
+// ── IMPORT THEME ─────────────────────────────────────────────────────────
+function importFolder(){
+  // Use webkitdirectory to let user point at a folder.
+  // Works for both a single theme folder and the Programme folder (multiple themes).
+  const inp=document.createElement('input');
+  inp.type='file';
+  inp.setAttribute('webkitdirectory','');
+  inp.setAttribute('multiple','');
+  inp.style.display='none';
+  document.body.appendChild(inp);
+  inp.onchange=async e=>{
+    document.body.removeChild(inp);
+    const files=[...e.target.files];
+    if(!files.length) return;
+    // Group files by their top-level subfolder (theme name)
+    // Files in Programme/ThemeA/Setting.txt → theme "ThemeA"
+    // Files in ThemeA/Setting.txt → theme "ThemeA" (single theme folder)
+    const themes={}; // themeName → {files:[File], path prefix}
+    for(const f of files){
+      // webkitRelativePath = "FolderName/subpath" or "FolderName/SubFolder/subpath"
+      const parts=f.webkitRelativePath.split('/');
+      // parts[0] = the folder the user selected
+      // If there's a Setting.txt at parts[0]/Setting.txt → single theme
+      // If Setting.txt is at parts[0]/ThemeX/Setting.txt → programme folder
+      if(parts.length===2 && parts[1].toLowerCase()==='setting.txt'){
+        // Single theme folder selected directly
+        const tname=parts[0];
+        if(!themes[tname]) themes[tname]={files:[],settingFile:null};
+        themes[tname].settingFile=f;
+        themes[tname].files.push(f);
+      } else if(parts.length>=2){
+        // Could be programme folder: parts[0]=Programme, parts[1]=ThemeName
+        const tname=parts.length>=3?parts[1]:parts[0];
+        if(!themes[tname]) themes[tname]={files:[],settingFile:null};
+        themes[tname].files.push(f);
+        if(parts[parts.length-1].toLowerCase()==='setting.txt'){
+          themes[tname].settingFile=f;
+        }
+      }
+    }
+    // Only keep themes that have a Setting.txt
+    const validThemes=Object.entries(themes).filter(([,v])=>v.settingFile);
+    if(validThemes.length===0){
+      toast('No theme folders with Setting.txt found in that location');
+      return;
+    }
+    if(validThemes.length===1){
+      // Load it directly
+      await importFromFileList(validThemes[0][0], validThemes[0][1].files, validThemes[0][1].settingFile);
+    } else {
+      // Multiple themes found — show picker
+      showThemePicker(validThemes.map(([name,data])=>({name,data})));
+    }
+  };
+  inp.click();
+}
+
+function showThemePicker(themes){
+  // Build thumbnail dataURLs for each theme (look for demo.png)
+  const thumbPromises=themes.map(async t=>{
+    const demoFile=t.data.files.find(f=>f.name.toLowerCase()==='demo.png');
+    if(demoFile){
+      t.thumb=await new Promise(res=>{
+        const r=new FileReader();
+        r.onload=e=>res(e.target.result);
+        r.readAsDataURL(demoFile);
+      });
+    }
+    return t;
+  });
+
+  Promise.all(thumbPromises).then(resolved=>{
+    const modal=document.createElement('div');
+    modal.className='mbg';
+    modal.innerHTML=`<div class="modal" style="max-width:480px;width:95%">
+      <h2>📁 Select a Theme to Import</h2>
+      <p style="color:var(--muted);font-size:12px;margin-bottom:10px">${resolved.length} themes found — click one to load it</p>
+      <div class="theme-picker">
+        ${resolved.map((t,i)=>`
+          <div class="theme-pick-item" onclick="doFolderImport(${i})">
+            ${t.thumb
+              ?`<img class="theme-pick-thumb" src="${t.thumb}">`
+              :`<div class="theme-pick-thumb" style="display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:10px">no<br>preview</div>`}
+            <div class="theme-pick-info">
+              <div class="theme-pick-name">${t.name}</div>
+              <div class="theme-pick-meta">${t.data.files.length} files</div>
+            </div>
+          </div>`).join('')}
+      </div>
+      <div class="mbtns"><button class="btn" onclick="this.closest('.mbg').remove()">Cancel</button></div>
+    </div>`;
+    document.body.appendChild(modal);
+    // Store resolved themes for doFolderImport callback
+    window._pendingFolderThemes=resolved;
+  });
+}
+
+async function doFolderImport(index){
+  document.querySelector('.mbg')?.remove();
+  const t=window._pendingFolderThemes?.[index];
+  if(!t) return;
+  await importFromFileList(t.name, t.data.files, t.data.settingFile);
+}
+
+async function importFromFileList(themeName, files, settingFile){
+  toast('Loading theme: '+themeName+'…');
+  try{
+    const settingTxt=await settingFile.text();
+    // Build imageMap from the file list
+    const imageMap={};
+    const imgFiles=files.filter(f=>/\.(png|jpg|jpeg)$/i.test(f.name));
+    await Promise.all(imgFiles.map(f=>new Promise(res=>{
+      const r=new FileReader();
+      r.onload=e=>{
+        // Store under the plain filename (e.g. "back.png", "d1.png")
+        imageMap[f.name]=e.target.result;
+        imageMap[f.name.toLowerCase()]=e.target.result;
+      };
+      r.onloadend=res;
+      r.readAsDataURL(f);
+    })));
+    parseSetting(settingTxt, imageMap);
+    toast('Loaded: '+themeName);
+  }catch(err){
+    toast('Import failed: '+err.message);
+    console.error(err);
+  }
+}
+
+function importTheme(){
+  // Accept either a .zip (full theme) or a Setting.txt file
+  pick('.zip,.txt,text/plain,application/zip',async f=>{
+    if(f.name.toLowerCase().endsWith('.zip')){
+      await importFromZip(f);
+    } else {
+      await importFromSettingTxt(f);
+    }
+  });
+}
+
+async function importFromZip(file){
+  if(typeof JSZip==='undefined'){toast('JSZip not loaded');return;}
+  toast('Reading ZIP…');
+  try{
+    const zip=await JSZip.loadAsync(file);
+    // Find Setting.txt anywhere in the ZIP
+    let settingFile=null, settingPath='';
+    zip.forEach((path,entry)=>{
+      if(!entry.dir && path.toLowerCase().endsWith('setting.txt')){
+        settingFile=entry; settingPath=path;
+      }
+    });
+    if(!settingFile){toast('No Setting.txt found in ZIP');return;}
+    const settingTxt=await settingFile.async('string');
+    // Collect image files from ZIP: back.png, d1.png, d2.png, d3.png…
+    const imageMap={}; // filename → dataURL
+    const themeRoot=settingPath.includes('/')?settingPath.substring(0,settingPath.lastIndexOf('/')+1):'';
+    const imgPromises=[];
+    zip.forEach((path,entry)=>{
+      if(entry.dir) return;
+      const fname=path.split('/').pop().toLowerCase();
+      if(/^(back|d\d+)\.(png|jpg|jpeg)$/i.test(fname)||
+         (path.includes('source/') && /\.(png|jpg|jpeg)$/i.test(fname))){
+        imgPromises.push(
+          entry.async('base64').then(b64=>{
+            const ext=fname.split('.').pop();
+            const mime=ext==='png'?'image/png':'image/jpeg';
+            imageMap[fname]='data:'+mime+';base64,'+b64;
+            // Also store by the original filename (non-lowercased)
+            const origName=path.split('/').pop();
+            imageMap[origName]='data:'+mime+';base64,'+b64;
+          })
+        );
+      }
+    });
+    await Promise.all(imgPromises);
+    parseSetting(settingTxt, imageMap);
+    toast('Theme imported from ZIP!');
+  }catch(err){
+    toast('Import failed: '+err.message);
+    console.error(err);
+  }
+}
+
+async function importFromSettingTxt(file){
+  toast('Reading Setting.txt…');
+  try{
+    const text=await file.text();
+    parseSetting(text, {});
+    toast('Setting.txt imported — load image files manually via Background / Add Image Layer');
+  }catch(err){
+    toast('Import failed: '+err.message);
+  }
+}
+
+function parseSetting(text, imageMap){
+  // Clear existing canvas
+  elems.forEach(el=>{const d=document.getElementById(el.id);if(d)d.remove();});
+  elems=[]; selId=null; nid=1; nz=1; niz=0;
+  renderProps(null);
+
+  const lines=text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  let themeName='ImportedTheme';
+  let maxZ=0;
+  const pendingElems=[]; // parsed element objects before linking
+  const ringElemsById={}; // z → ring element, for label linking
+
+  // Helper: parse key@value pairs
+  function parseProps(str){
+    const props={};
+    // Split on comma but not inside parentheses (for CornerRadius values with spaces)
+    const parts=str.split(',');
+    parts.forEach(p=>{
+      const at=p.indexOf('@');
+      if(at>0){
+        const k=p.slice(0,at).trim();
+        const v=p.slice(at+1).trim();
+        props[k.toLowerCase()]=v; // lowercase keys for easy lookup
+        props[k]=v; // also preserve original case
+      }
+    });
+    return props;
+  }
+
+  for(const line of lines){
+    if(line.startsWith('name:')){
+      themeName=line.slice(5).trim();
+      document.getElementById('themeName').value=themeName;
+      continue;
+    }
+    if(line.startsWith('width:')){
+      const w=parseInt(line.slice(6));
+      if(w===1920) setOri('horizontal'); else setOri('vertical');
+      continue;
+    }
+    if(line.startsWith('height:')) continue; // handled by width
+
+    const colon=line.indexOf(':');
+    if(colon<0) continue;
+    const typePart=line.slice(0,colon).trim();
+    const propStr=line.slice(colon+1).trim();
+    const p=parseProps(propStr);
+
+    const id='el_'+(nid++);
+    const z=parseInt(p.z||p.Z||0);
+    maxZ=Math.max(maxZ,z);
+
+    const x=parseFloat(p.x||p.X||0);
+    const y=parseFloat(p.y||p.Y||0);
+
+    if(typePart==='Text'){
+      const isStatic=p.isdefaulttext==='true'||p.IsDefaultText==='true';
+      const fontFamily=(p.fontfamily||p.FontFamily||'#Arial').replace(/^#/,'');
+      const dataKey=p.data||p.Data||'';
+      const title=p.title||p.Title||'';
+      const unit=p.unit||p.Unit||'';
+      const fs=parseInt(p.fontsize||p.FontSize||30);
+      const mw=parseInt(p.maxwidth||p.MaxWidth||300);
+      const mh=parseInt(p.maxheight||p.MaxHeight||80);
+      const color=p.foreground||p.Foreground||'#FFFFFFFF';
+      const el={id,type:isStatic?'static':'text',dataKey,unit,
+        x,y,z,visible:true,title:isStatic?(dataKey||title):title,
+        w:mw,h:mh,fontSize:fs,fontFamily,color,
+        bold:false,scaleFont:false,isDefaultText:isStatic};
+      pendingElems.push(el);
+    } else if(typePart==='BorderLine'){
+      const dataKey=p.data||p.Data||'';
+      const mw=parseInt(p.maxwidth||p.MaxWidth||300);
+      const mh=parseInt(p.maxheight||p.MaxHeight||40);
+      if(dataKey){
+        // Data-bound bar
+        const el={id,type:'bar',dataKey,
+          x,y,z,visible:true,
+          w:mw,h:mh,
+          maxNum:parseInt(p.maxnum||p.MaxNum||100),
+          fillColor:p.fill||p.Fill||'#FF499CDE',
+          borderColor:p.borderfill||p.BorderFill||'#FFFFFFFF',
+          bgColor:p.backcolor||p.BackColor||'#00000000',
+          borderThickness:parseInt(p.borderthicknes||p.BorderThicknes||2),
+          cornerRadius:p.cornerradius||p.CornerRadius||'0 0 0 0',
+          animated:(p.isanimationenabled||p.IsAnimationEnabled||'').toLowerCase()==='true'};
+        pendingElems.push(el);
+      } else {
+        // Decorative block
+        const el={id,type:'decor',
+          x,y,z,visible:true,
+          w:mw,h:mh,
+          fillColor:p.fill||p.Fill||'#FF4A4745',
+          cornerRadius:p.cornerradius||p.CornerRadius||'0 0 0 0'};
+        pendingElems.push(el);
+      }
+    } else if(typePart==='RingProgressBar'){
+      const dataKey=p.data||p.Data||'';
+      const perimeter=parseInt(p.perimeter||p.Perimeter||200);
+      const el={id,type:'ring',dataKey,
+        x,y,z,visible:true,
+        w:perimeter,h:perimeter,
+        ringWidth:parseInt(p.ringwidth||p.RingWidth||12),
+        perimeter,
+        maxValue:parseInt(p.maxvalue||p.MaxValue||100),
+        indexColor:p.indexcolor||p.IndexColor||'#FF00B3EA',
+        backColor:p.backcolor||p.BackColor||'#FF333344',
+        showLabel:false, // will be set true if we find a matching text
+        labelColor:'#FFFFFFFF',
+        labelFont:'HarmonyOS Sans SC'};
+      pendingElems.push(el);
+      ringElemsById[z]=el;
+    } else {
+      // Image layer: filename is the type part, e.g. "d1.png" or "back.png"
+      const fname=typePart;
+      if(/\.(png|jpg|jpeg)$/i.test(fname)){
+        const w=parseInt(p.width||p.Width||CW);
+        const h=parseInt(p.height||p.Height||CH);
+        const imgData=imageMap[fname]||imageMap[fname.toLowerCase()]||null;
+        const el={id,type:'image',filename:fname,
+          x,y,z,visible:true,w,h,
+          data:imgData};
+        pendingElems.push(el);
+      }
+    }
+  }
+
+  // Link text elements to rings: if a text element has the same dataKey as a ring
+  // and its z = ring.z + 1 (or ring.z - 1), treat it as the ring label
+  const rings=pendingElems.filter(e=>e.type==='ring');
+  const texts=pendingElems.filter(e=>e.type==='text');
+  for(const ring of rings){
+    // Find a text with same dataKey and z adjacent to ring
+    const lbl=texts.find(t=>
+      t.dataKey===ring.dataKey &&
+      (t.z===ring.z+1||t.z===ring.z-1||Math.abs(t.z-ring.z)<=2) &&
+      !t.ringLabelFor
+    );
+    if(lbl){
+      ring.showLabel=true;
+      ring.labelElemId=lbl.id;
+      ring.labelFont=lbl.fontFamily||'HarmonyOS Sans SC';
+      ring.labelColor=lbl.color||'#FFFFFFFF';
+      lbl.ringLabelFor=ring.id;
+      lbl.x=ring.x; lbl.y=ring.y;
+      lbl.w=ring.perimeter; lbl.h=ring.perimeter;
+    }
+  }
+
+  // Determine background image
+  const backImg=imageMap['back.png']||imageMap['back.PNG']||null;
+  if(backImg){
+    backData={data:backImg,name:'back.png'};
+    const img=document.getElementById('backImg');
+    img.src=backImg; img.style.display='block';
+  }
+
+  // Add all elements to canvas
+  nz=maxZ+1;
+  for(const el of pendingElems){
+    elems.push(el);
+    renderEl(el);
+  }
+
+  refreshLayers();
+  updStatus();
+  setTimeout(()=>chZoom(0),100);
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────────
